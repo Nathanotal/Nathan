@@ -1,5 +1,5 @@
 <script lang="ts">
-	import anime from 'animejs/lib/anime.es.js';
+	// import anime from 'animejs/lib/anime.es.js';
 	import { onMount } from 'svelte';
 	import type { Server } from '$/types/server';
 	import type { User } from '$/types/user';
@@ -67,20 +67,20 @@
 	}
 
 
-	onMount(() => {
-		anime(
-			{
-				targets: '.neuron',
-				scale: [
-					{value: 1, easing: 'easeOutSine', duration: 200},
-					{value: 0.5, easing: 'easeInOutQuad', duration: 200},
-					{value: 1, easing: 'easeInOutQuad', duration: 200},
-					{value: 1, easing: 'easeInOutQuad', duration: 0},
-				],
-				loop: true
-			}
-			);
-	});
+	// onMount(() => {
+	// 	anime(
+	// 		{
+	// 			targets: '.neuron',
+	// 			scale: [
+	// 				{value: 1, easing: 'easeOutSine', duration: 200},
+	// 				{value: 0.5, easing: 'easeInOutQuad', duration: 200},
+	// 				{value: 1, easing: 'easeInOutQuad', duration: 200},
+	// 				{value: 1, easing: 'easeInOutQuad', duration: 0},
+	// 			],
+	// 			loop: true
+	// 		}
+	// 		);
+	// });
 </script>
 
 <html lang="english">
@@ -88,10 +88,9 @@
 		<title>Neuromorphic visualization</title>
 	</head>
 	<body>
-		<div class='safeViewArea'>
 		<!-- <h1>Problem visualization</h1> -->
 		<!-- A window which fills 80% of the width and height of the screen -->
-		<!-- <div class="window">
+		<div class="window">
 			{#each Array.from(Array(20).keys()) as x}
 				<div class='row'>
 					
@@ -114,26 +113,11 @@
 			</div>
 
 			{/each}
-		</div> -->
 	</div>
 	</body>
 </html>
 
 <style>
-	.safeViewArea {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		height: 100%;
-		background-color: #000;
-	}
-	.main {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		background-color: orange;
-		/* aspect-ratio: 1/1; */
-	}
 	.window {
 		display: flex;
 		flex-direction: row;

@@ -1,0 +1,112 @@
+/* The principal network should be in the center */
+/* The utilization neurons should be to the left of the principal network in a column */
+/* The capacity neurons should be to the left of the principal network in a column */
+/* The wta neurons should be below the principal network in a row*/
+.principal_network {
+    display: flex;
+    flex: 1;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    /* Make a DOTTED white line around the principal network */
+    border: white;
+    border-style: dashed;
+    border-width: 2px;
+
+}
+.utilization_neurons {
+    display: flex;
+    flex: 0.25;
+    height: 100%;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    /* border: red; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.capacity_neurons {
+    display: flex;
+    flex: 0.25;
+    height: 100%;
+
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    /* border: red; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.main_network_row {
+    margin-top: auto;
+    display: flex;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    /* border: red; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.wta_neurons {
+    display: flex;
+    flex: 0.25;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+    margin-bottom: auto;
+    /* border: green; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.column_neurons {
+
+    /* border: green; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.window {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    background: #000;
+    /* justify-content: space-around; */
+    align-items: center;
+    padding: 10px;
+    /* border: orange;
+    border-style: solid;
+    border-width: 1px; */
+}
+.layer{
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    /* border: red; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+}
+.layer_horizontal{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    /* border: red; */
+    /* border-style: solid; */
+    /* border-width: 1px; */
+    width: 66.6666667%; /* TODO: find a better way */
+}
+.neuron {
+    background: #fff;
+    border-radius: 50%;
+    height: 25px;
+    width: 25px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 10%;
+    margin-bottom: 10%;
+    background: blue;
+}

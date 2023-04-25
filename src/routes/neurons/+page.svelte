@@ -1,104 +1,47 @@
-<script lang="ts">
-	import anime from 'animejs/lib/anime.es.js';
-	import { onMount } from 'svelte';
-	import type { Neuron } from '$/types/neuron';
-	import type { Layer } from '$/types/layer';
+<script lang='ts'>
+	import EdgeUserAllocation from './EdgeUserAllocation.svelte';
+	import type { EdgeUserAllocationParams } from '$/types/simulation';
 
-	const layers: Layer[] = [];
-
-	const n_servers = 5;
-	const n_users = 20;
-
-	for (let i = 0; i < n_users; i++) {
-		const neurons: Neuron[] = [];
-		for (let j = 0; j < n_servers; j++) {
-			neurons.push({
-				id: j
-			});
-		}
-		
-		layers.push({
-			id: i,
-			neurons: neurons
-		});
+	let params: EdgeUserAllocationParams = {
+		animation_interval: 200,
+		n_users: 40,
+		n_servers: 6,
+		server_capacity: 15,
+		vth_P: 3,
+		noise_probability: 0.3,
+		noise_strength: 1,
+		wta_inhibition: -2,
+		capacity_inhibition: -4,
+		utilization_excitation: 1
 	}
 
-
-	onMount(() => {
-		anime(
-			{
-				targets: '.neuron',
-				scale: [
-					{value: 1, easing: 'easeOutSine', duration: 200},
-					{value: 0.5, easing: 'easeInOutQuad', duration: 200},
-					{value: 1, easing: 'easeInOutQuad', duration: 200},
-					{value: 1, easing: 'easeInOutQuad', duration: 0},
-				],
-				loop: true
-			}
-			);
-	});
 </script>
 
-<html lang="english">
-	<head>
-		<title>Neuromorphic visualization</title>
-	</head>
-	<body class="main">
-		<h1>Homepage</h1>
-		<!-- A window which fills 80% of the width and height of the screen -->
-		<div class="window">
-			{#each layers as layer}
-				<div class="layer">
-					{#each layer.neurons as neuron}
-						<div class="neuron" id={neuron.id}>
-							<!-- {neuron.id + 1} -->
-						</div>
-					{/each}
-				</div>
-			{/each}
-		</div>
-	</body>
-</html>
+<div class='problem'>
+	<div class='neuronWindow'>
+		<EdgeUserAllocation params={params}/>
+	</div>
+	<!-- <div class='visualizationWindow'>
+
+	</div> -->
+
+</div>
 
 <style>
-	html {
-		flex: 1;
+	.problem {
+		display: flex;
 		height: 100%;
+		width: 100%; 
+		background: green;
 	}
-	.main {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-	}
-	.window {
+	.neuronWindow {
 		display: flex;
 		flex: 1;
-		background: #000;
-		justify-content: space-around;
-		align-items: center;
-		padding: 10px;
+		background-color: aquamarine;
 	}
-	.layer{
+	.visualizationWindow {
 		display: flex;
 		flex: 1;
-		flex-direction: column;
-		align-items: center;
-		justify-content: space-around;
-		/* border: red; */
-		/* border-style: solid; */
-		/* border-width: 1px; */
-	}
-	.neuron {
-		background: #fff;
-		border-radius: 50%;
-		height: 25px;
-		width: 25px;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		margin-top: 10%;
-		margin-bottom: 10%;
+		background-color: aqua;
 	}
 </style>
