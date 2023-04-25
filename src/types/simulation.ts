@@ -1,4 +1,5 @@
 import type { Matrix } from 'mathjs' // TODO: fix
+import type { Problem } from './problem.type';
 
 export type SimulationInput = {
     principal_neurons:Matrix,
@@ -14,6 +15,7 @@ export type SimulationInput = {
     noise_probability:number,
     noise_strength:number,
     server_capacity:number,
+    user_server_assignments:Matrix,
 };
 
 export type SimulationOutput = {
@@ -39,5 +41,6 @@ export type EdgeUserAllocationParams = {
     noise_strength:number, // 1
     wta_inhibition:number, // -2
     capacity_inhibition:number, // -4
-    utilization_excitation:number // 1
+    utilization_excitation:number, // 1
+    problem:Problem 
 }

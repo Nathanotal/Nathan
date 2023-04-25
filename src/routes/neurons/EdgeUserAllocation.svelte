@@ -1,13 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { zeros, ones, add, subtract, multiply } from 'mathjs'
-	import { initialize_neurons, initialize_painted_neurons } from './initialization.ts'
-	import { get_principal_animations, get_auxiliary_animations } from './animation.ts'
+	import { initialize_neurons } from './initialization.ts'
+	import { get_principal_animations, get_auxiliary_animations, get_user_animations } from './animation.ts'
 	import { simulate_timestep } from './simulation.ts'
+	import Visualization from './Visualization.svelte';
+	import Neurons from './Neurons.svelte';
 	import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
+	import type { User, Server, Problem } from '$/types/problem'
+
+    export let params: EdgeUserAllocationParams;
+
+	let users: User[] = params.problem.users; // TODO: use these
+	let servers: Server[] = params.problem.servers;
 
 	let customAnimationLoop: number;
-    export let params: EdgeUserAllocationParams;
 	let animation_interval = params.animation_interval;
 
 	let n_users = params.n_users;
@@ -19,13 +25,6 @@
 	let wta_inhibition = params.wta_inhibition;
 	let capacity_inhibition = params.capacity_inhibition;
 	let utilization_excitation = params.utilization_excitation;
-
-	const [
-		layers,
-		utilization_neurons,
-		capacity_neurons,
-		wta_neurons
-	] = initialize_painted_neurons(n_users, n_servers);
 
 	let [
 		principal_neurons, 
@@ -45,7 +44,7 @@
 		utilization_output = result.utilization_output;
 	}
 
-	function loop(t:number, animations:any[], targets: any, lastUpdate: number, step: number) {
+	function loop(t:number, animations:any[], lastUpdate: number, step: number) {
 		animations.forEach((animation) => {
 			animation.tick(t);
 		}); // TODO: make more performant
@@ -67,73 +66,56 @@
 				n_servers: n_servers,
 				noise_probability: noise_probability,
 				noise_strength: noise_strength,
-				server_capacity: server_capacity
+				server_capacity: server_capacity,
+				user_server_assignments: user_server_assignments
 			}
 
 			const result:SimulationOutput = simulate_timestep(simulationParams);
 			updateVariables(result);
 			animations = [];
-			animations.push(...get_principal_animations(result, n_servers, n_users, vth_P, animation_interval)); // TODO: remove n_servers, n_users
+			animations.push(...get_principal_animations(result, vth_P, animation_interval)); // TODO: remove n_servers, n_users
 			animations.push(...get_auxiliary_animations(result, animation_interval));
+			animations.push(...get_user_animations(result, animation_interval, servers));
 		}
-
-		customAnimationLoop = requestAnimationFrame((t) => loop(t, animations, targets, lastUpdate, step));
+		customAnimationLoop = requestAnimationFrame((t) => loop(t, animations, lastUpdate, step));
 	}
 
 	onMount(() => {
-		// If there is a custom animation loop, cancel it
+		// If there is a custom animation loop, cancel it, todo: fix better solution
 		if (customAnimationLoop) {
 			cancelAnimationFrame(customAnimationLoop);
 		}
-		const targets = document.querySelectorAll('.neuron');
 		const animations:any = [];
-		requestAnimationFrame((t) => loop(t, animations, targets, 0, 0));
+		requestAnimationFrame((t) => loop(t, animations, 0, 0));
 	});
 
 </script>
 
-<!-- A window which fills 80% of the width and height of the screen -->
-<div class="window">
-	<div class='main_network_row'>
-	<div class='utilization_neurons'>
-		<div class="layer">
-			{#each utilization_neurons as neuron, j}
-				<div class="neuron column_neurons u_{j}" id={neuron.id}>
-					<!-- {neuron.id + 1} -->
-				</div>
-			{/each}
-		</div>
+<div class='problem'>
+	<div class='neuronWindow'>
+		<Neurons params={params} />
 	</div>
-	<div class='principal_network'>
-	{#each layers as layer, i}
-		<div class="layer">
-			{#each layer.neurons as neuron, j}
-				<div class="neuron i{i}{j}" id={neuron.id}>
-					<!-- {neuron.id + 1} -->
-				</div>
-			{/each}
-		</div>
-	{/each}
-</div>
-<div class='capacity_neurons'>
-	<div class="layer">
-		{#each capacity_neurons as neuron, j}
-			<div class="neuron column_neurons c_{j}" id={neuron.id}>
-				<!-- {neuron.id + 1} -->
-			</div>
-		{/each}
+	<div class='visualizationWindow'>
+		<Visualization params={params}/>
 	</div>
-</div>
-</div>
-<div class='wta_neurons'>
-	<div class="layer_horizontal">
-		{#each wta_neurons as neuron, j}
-			<div class="neuron w_{j}" id={neuron.id}>
-				<!-- {neuron.id + 1} -->
-			</div>
-		{/each}
-	</div>
-</div>
 </div>
 
-<style src="./styles.css" lang="css"></style>
+
+<style>
+	.problem {
+		display: flex;
+		height: 100%;
+		width: 100%; 
+		background: green;
+	}
+	.neuronWindow {
+		display: flex;
+		flex: 1;
+		background-color: aquamarine;
+	}
+	.visualizationWindow {
+		display: flex;
+		flex: 1;
+		background-color: aqua;
+	}
+</style>

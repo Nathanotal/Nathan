@@ -73,7 +73,7 @@ export function simulate_timestep(params:SimulationInput) {
     // Update user server assignments.
     // Each user has n_server neurons. The first neuron in these columns which fires is the index of the server the user is assigned to.
     // TODO: fix, there is something wrong with capacity
-    const new_user_server_assignments = zeros(1, params.n_users);
+    const new_user_server_assignments = params.user_server_assignments;
     const new_server_utilization = zeros(params.n_servers, 1); // This is a bit stupid (change?)
     for (let j = 0; j<params.n_users; j++){ // TODO: make more performant
         for (let i = 0; i<params.n_servers; i++){
@@ -106,7 +106,6 @@ export function simulate_timestep(params:SimulationInput) {
             }
         }
     });
-    console.log(servers_at_capacity.toString());
 
     // Reset the charge of firing neurons
     for (let i = 0; i < params.n_servers; i++) { // TODO: make more performant

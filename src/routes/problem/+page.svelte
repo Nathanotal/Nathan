@@ -65,22 +65,6 @@
 			capacity: capacity
 		});
 	}
-
-
-	// onMount(() => {
-	// 	anime(
-	// 		{
-	// 			targets: '.neuron',
-	// 			scale: [
-	// 				{value: 1, easing: 'easeOutSine', duration: 200},
-	// 				{value: 0.5, easing: 'easeInOutQuad', duration: 200},
-	// 				{value: 1, easing: 'easeInOutQuad', duration: 200},
-	// 				{value: 1, easing: 'easeInOutQuad', duration: 0},
-	// 			],
-	// 			loop: true
-	// 		}
-	// 		);
-	// });
 </script>
 
 <html lang="english">

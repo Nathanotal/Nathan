@@ -1,12 +1,42 @@
 import anime from 'animejs'
 import type { SimulationInput, SimulationOutput } from '$/types/simulation';
 
-export function get_principal_animations(result:SimulationOutput, n_servers:number, n_users:number, vth_P: number, animation_interval:number){
+export function get_user_animations(result:SimulationOutput, animation_interval:number, servers: any[]){
+    const animations:any = [];
+
+    result.user_server_assignments.forEach((assignment: any, index:number[]) => {
+        const user_index = index[1];
+        if (assignment === -1) {
+            return; // Unassigned
+        }
+        const server = servers[assignment];
+        const r = server.color[0];
+        const g = server.color[1];
+        const b = server.color[2];
+        const animation = anime({
+            targets: `.user_${user_index}`,
+            background: `rgb(${r},${g},${b})`,
+            duration: animation_interval,
+            easing: 'linear', // TODO: make custom
+            autoplay: false,
+            loop: false
+        });
+
+        animations.push(animation);
+    });
+
+    
+    return animations;
+}
+
+export function get_principal_animations(result:SimulationOutput, vth_P: number, animation_interval:number){
     // Returns one animation for each principal neuron based 
     // on the value of the neuron
     const animations = [];
     const principal_neurons_from_param = result.principal_neurons;
     const firing_neurons = result.firing_neurons;
+    const n_servers = firing_neurons.size()[0];
+    const n_users = firing_neurons.size()[1];
     // TODO: make more performant
     for (let i = 0; i < n_servers; i++) {
         for (let j = 0; j < n_users; j++) {
