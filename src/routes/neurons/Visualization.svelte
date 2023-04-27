@@ -1,32 +1,36 @@
 <script lang='ts'>
 	import type { EdgeUserAllocationParams } from '$/types/simulation';
+	import { writable  } from 'svelte/store';
+	import type { Writable } from 'svelte/store';
 	import type {User, Server, Problem} from '$/types/problem'
 	import { onMount } from 'svelte';
-	let visualisering_width:number= 0;
-	let visualisering_height:number= 0;
+	let visualisering_width:number = 0;
+	let visualisering_height:number = 0;
 	
     export let params: EdgeUserAllocationParams;
 
-	let users: User[] = params.problem.users;
-	let servers: Server[] = params.problem.servers;
+	let users: User[], servers: Server[];
+
+	$: {
+        users = params.problem.users;
+        servers = params.problem.servers;
+    }
+
+	const updateDimensions = () => {
+        let visualisering = document.querySelector('.visualisering');
+        if (visualisering) {
+            visualisering_width = visualisering.clientWidth;
+            visualisering_height = visualisering.clientHeight;
+        }
+    };
 
 	onMount(() => {
 		// Get the width and height of the .visualisering window
-		let visualisering = document.querySelector('.visualisering'); // TODO: update on window resize
-		let vis_width;
-		let vis_height;
-		if (visualisering?.clientWidth === undefined){
-			vis_width = 0
-		} else {
-			vis_width = visualisering?.clientWidth
-		}
-		if (visualisering?.clientHeight === undefined){
-			vis_height = 0
-		} else {
-			vis_height = visualisering?.clientHeight
-		}
-		visualisering_width = vis_width;
-		visualisering_height = vis_height;
+		updateDimensions();
+		window.addEventListener('resize', updateDimensions);
+        return () => {
+            window.removeEventListener('resize', updateDimensions);
+        };
 	})
 
 </script>
@@ -37,8 +41,7 @@
 			<div class='user user_{i}' style='left: {user.x * visualisering_width}px; top: {user.y * visualisering_height}px;'>
 			</div>
 		{/each}
-		
-		{#each servers as server, i}
+		{#each servers  as server, i}
 			<div class='server server_{i}' style='left: {server.x * visualisering_width}px; top: {server.y * visualisering_height}px; background-color: rgb({server.color[0]}, {server.color[1]}, {server.color[2]}); '>
 			</div>
 			<div class='server_radius server_radius_{i}' style='left: {server.x * visualisering_width}px; top: {server.y * visualisering_height}px; background-color: rgba({server.coverageColor[0]}, {server.coverageColor[1]}, {server.coverageColor[2]}, 0.05); '>

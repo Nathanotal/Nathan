@@ -60,7 +60,7 @@ export function initialize_painted_neurons(n_users: number, n_servers: number){
     return [layers, utilization_neurons, capacity_neurons, wta_neurons]
 }
 
-export function generate_problem(params: any): Problem{
+export function generate_problem(params: any): Problem {
 	let servers = generate_servers(params);
 	let users = generate_users(params);
 
@@ -73,15 +73,18 @@ export function generate_problem(params: any): Problem{
 
 function generate_servers(params:any){
 	let servers: Server[] = [];
-	// Maximum 7 different colors, todo: make 20
+	// Maximum 10 (think about expanding this)
 	const colors_to_choose_from = [
-		[255, 0, 0],
-		[0, 255, 0],
-		[0, 0, 255],
-		[255, 255, 0],
-		[255, 0, 255],
-		[0, 255, 255],
-		[255, 255, 255],
+		[255, 65, 54],
+		[255, 133, 27],
+		[255, 220, 0],
+		[46, 204, 64],
+		[0, 116, 217],
+		[177, 13, 201],
+		[240, 18, 190],
+		[127, 219, 25],
+		[1, 255, 112],
+		[61, 153, 112]
 	]
 
 	if (params.n_servers > colors_to_choose_from.length){

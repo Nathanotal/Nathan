@@ -3,13 +3,16 @@
     export let params: EdgeUserAllocationParams;
 	import type { EdgeUserAllocationParams } from '$/types/simulation';
 
-    const [
-		layers,
-		utilization_neurons,
-		capacity_neurons,
-		wta_neurons
-	] = initialize_painted_neurons(params.n_users, params.n_servers);
+    let layers:any, utilization_neurons:any,capacity_neurons:any, wta_neurons:any;
 
+	$: {
+		[
+			layers,
+			utilization_neurons,
+			capacity_neurons,
+			wta_neurons
+		] = initialize_painted_neurons(params.n_users, params.n_servers);
+	}
 </script>
 <!-- A window which fills 80% of the width and height of the screen -->
 <div class="window">

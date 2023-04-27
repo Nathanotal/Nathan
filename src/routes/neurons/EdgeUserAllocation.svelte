@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { initialize_neurons } from './initialization.ts'
 	import { get_principal_animations, get_auxiliary_animations, get_user_animations } from './animation.ts'
 	import { simulate_timestep } from './simulation.ts'
@@ -7,24 +7,18 @@
 	import Neurons from './Neurons.svelte';
 	import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
 	import type { User, Server, Problem } from '$/types/problem'
+	import ControlCenter from './ControlCenter.svelte';
+	import PerformanceDisplay from './PerformanceDisplay.svelte';
+
 
     export let params: EdgeUserAllocationParams;
+	let p: string = params.n_users.toString() + " users, " + params.n_servers.toString() + " servers";
 
 	let users: User[] = params.problem.users; // TODO: use these
 	let servers: Server[] = params.problem.servers;
-
 	let customAnimationLoop: number;
-	let animation_interval = params.animation_interval;
 
-	let n_users = params.n_users;
-	let n_servers = params.n_servers;
-	let server_capacity = params.server_capacity;
-	let vth_P = params.vth_P;
-	let noise_probability = params.noise_probability;;
-	let noise_strength = params.noise_strength;
-	let wta_inhibition = params.wta_inhibition;
-	let capacity_inhibition = params.capacity_inhibition;
-	let utilization_excitation = params.utilization_excitation;
+	let animation_interval = params.animation_interval;
 
 	let [
 		principal_neurons, 
@@ -33,7 +27,25 @@
 		server_utilization, 
 		capacity_output, 
 		utilization_output
-	] = initialize_neurons(n_users, n_servers);
+	] = initialize_neurons(params.n_users, params.n_servers);
+
+	$: {
+        users = params.problem.users;
+        servers = params.problem.servers;
+        animation_interval = params.animation_interval;
+
+        [
+            principal_neurons,
+            user_server_assignments,
+            wta_output,
+            server_utilization,
+            capacity_output,
+            utilization_output
+        ] = initialize_neurons(params.n_users, params.n_servers);
+
+        // Update the text
+        p = params.n_users.toString() + " users, " + params.n_servers.toString() + " servers";
+    }
 
 	function updateVariables(result:SimulationOutput){
 		principal_neurons = result.principal_neurons;
@@ -58,22 +70,14 @@
 				wta_output: wta_output,
 				capacity_output: capacity_output,
 				utilization_output: utilization_output,
-				wta_inhibition: wta_inhibition,
-				capacity_inhibition: capacity_inhibition,
-				utilization_excitation: utilization_excitation,
-				vth_P: vth_P,
-				n_users: n_users,
-				n_servers: n_servers,
-				noise_probability: noise_probability,
-				noise_strength: noise_strength,
-				server_capacity: server_capacity,
-				user_server_assignments: user_server_assignments
+				user_server_assignments: user_server_assignments,
+				...params
 			}
 
 			const result:SimulationOutput = simulate_timestep(simulationParams);
 			updateVariables(result);
 			animations = [];
-			animations.push(...get_principal_animations(result, vth_P, animation_interval)); // TODO: remove n_servers, n_users
+			animations.push(...get_principal_animations(result, params.vth_P, animation_interval)); // TODO: remove n_servers, n_users
 			animations.push(...get_auxiliary_animations(result, animation_interval));
 			animations.push(...get_user_animations(result, animation_interval, servers));
 		}
@@ -89,15 +93,39 @@
 		requestAnimationFrame((t) => loop(t, animations, 0, 0));
 	});
 
+
+	function updateParams(event:any){
+		params = event.detail;
+	}
+
+	onDestroy(() => {
+        if (customAnimationLoop) {
+            cancelAnimationFrame(customAnimationLoop);
+        }
+    });
+
 </script>
 
 <div class='problem'>
-	<div class='neuronWindow'>
-		<Neurons params={params} />
+	<p>{p}</p>
+	<div class='topRow'>
+		<div class='neuronWindow'>
+			<Neurons params={params} />
+		</div>
+		<div class='visualizationWindow'>
+			<Visualization params={params}/>
+		</div>
 	</div>
-	<div class='visualizationWindow'>
-		<Visualization params={params}/>
+	<div class='bottomRow'>
+		<div class='controlWindow'>
+			<ControlCenter bind:params={params} on:updateParams={(e) => updateParams(e)}/>
+	
+		</div>
+		<div class='performanceWindow'>
+			<PerformanceDisplay params={params}/>
+		</div>
 	</div>
+	
 </div>
 
 
@@ -107,6 +135,7 @@
 		height: 100%;
 		width: 100%; 
 		background: green;
+		flex-direction: column;
 	}
 	.neuronWindow {
 		display: flex;
@@ -114,6 +143,27 @@
 		background-color: aquamarine;
 	}
 	.visualizationWindow {
+		display: flex;
+		flex: 1;
+		background-color: aqua;
+	}
+	.controlWindow {
+		display: flex;
+		width: 100%;
+		flex: 1;
+		background-color: green;
+	}
+	.performanceWindow {
+		display: flex;
+		flex: 1;
+		background-color: aqua;
+	}
+	.topRow {
+		display: flex;
+		flex: 1;
+		background-color: aqua;
+	}
+	.bottomRow {
 		display: flex;
 		flex: 1;
 		background-color: aqua;
