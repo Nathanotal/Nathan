@@ -1,5 +1,5 @@
-import { zeros, ones, add, matrix, multiply } from 'mathjs'
-import type { SimulationInput, SimulationOutput } from '$/types/simulation';
+import { zeros, ones, add, matrix, multiply, max, sum } from 'mathjs'
+import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
 import type { Matrix } from 'mathjs' // TODO: fix
 
 function get_raster(n_servers: number, n_users: number, noise_probability: number, noise_strength: number) {
@@ -121,7 +121,8 @@ export function simulate_timestep(params:SimulationInput) {
         capacity_output: servers_at_capacity, 
         utilization_output: firing_servers, 
         user_server_assignments: new_user_server_assignments, 
-        server_utilization: new_server_utilization, 
+        server_utilization: new_server_utilization,
+        user_count_per_server: user_count_per_server,
         principal_neurons: params.principal_neurons,
         firing_neurons: firing_neurons,
         firing_users: firing_users,
@@ -130,4 +131,37 @@ export function simulate_timestep(params:SimulationInput) {
     }
 
     return toReturn
+}
+
+export function getFitness(params:EdgeUserAllocationParams, userCountPerServer:Matrix):number {
+    
+    const capacity = params.server_capacity; // TODO: change to be dynamic
+
+    // If any server is over capacity, the fitness is 0
+    if (max(userCountPerServer) > capacity) {
+        return 0;
+    }
+
+    // - the number of users who are assigned to any server
+    const n_users_assigned = sum(userCountPerServer);
+
+    // - the number of servers which do not have any users assigned to them
+    const n_deallocated_servers = countZeros(userCountPerServer); // TODO: make more performant
+
+    let fitness:number = -n_users_assigned;
+    if (n_users_assigned === params.n_users) {
+        fitness -= n_deallocated_servers;
+    }
+
+    return fitness;
+}
+
+function countZeros(matrix:Matrix):number {
+    let count = 0;
+    matrix.forEach((value) => {
+        if (value === 0) {
+            count++;
+        }
+    });
+    return count;
 }

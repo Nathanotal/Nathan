@@ -22,7 +22,8 @@
 		principal_neurons, 
 		user_server_assignments, 
 		wta_output, 
-		server_utilization, 
+		server_utilization,
+		user_count_per_server, 
 		capacity_output, 
 		utilization_output
 	] = initialize_neurons(params.n_users, params.n_servers);
@@ -37,6 +38,7 @@
             user_server_assignments,
             wta_output,
             server_utilization,
+			user_count_per_server,
             capacity_output,
             utilization_output
         ] = initialize_neurons(params.n_users, params.n_servers);
@@ -47,6 +49,7 @@
 		user_server_assignments = result.user_server_assignments;
 		wta_output = result.wta_output;
 		server_utilization = result.server_utilization;
+		user_count_per_server = result.user_count_per_server;
 		capacity_output = result.capacity_output;
 		utilization_output = result.utilization_output;
 	}
@@ -113,10 +116,9 @@
 	<div class='bottomRow'>
 		<div class='controlWindow'>
 			<ControlCenter bind:params={params} on:updateParams={(e) => updateParams(e)}/>
-	
 		</div>
 		<div class='performanceWindow'>
-			<PerformanceDisplay params={params}/>
+			<PerformanceDisplay params={params} userCountPerServer={user_count_per_server} />
 		</div>
 	</div>
 	

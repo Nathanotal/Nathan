@@ -24,6 +24,7 @@ export type SimulationOutput = {
     utilization_output: Matrix[],
     user_server_assignments: Matrix[],
     server_utilization: Matrix[],
+    user_count_per_server: Matrix[],
     principal_neurons: Matrix[],
     firing_neurons: Matrix[],
     firing_users: Matrix[],

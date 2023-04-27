@@ -1,6 +1,12 @@
 # Todo
 
+- [ ] Add performance display
+  - [ ] Add fitness function
+  - [ ] Make graph
+  - [ ] Make graph animation
 - [ ] Fix WTA css
+  - [ ] Transpose WTA
+  - [ ] Fix scaling
 - [X] Move around logic
 - [X] Fix server colors
   - [X] Improve
@@ -19,3 +25,4 @@
 - [ ] Add display connections on hover
 - [ ] Implement loading screen + lazy load
 - [ ] Style website
+- [ ] Clean up the code

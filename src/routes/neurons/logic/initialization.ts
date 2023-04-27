@@ -11,7 +11,7 @@ export function initialize_neurons(n_users: number, n_servers: number){
     const server_column:Matrix = matrix(zeros(n_servers, 1));
 	// The first second user_server_assignments, default this to -1
 	const user_server_assignments: Matrix = matrix(subtract(user_column, ones(1, n_users)))
-    return [principal_neurons, user_server_assignments, user_column, server_column, server_column, server_column]
+    return [principal_neurons, user_server_assignments, user_column, server_column, server_column, server_column, server_column]
 }
 
 export function initialize_painted_neurons(n_users: number, n_servers: number){
