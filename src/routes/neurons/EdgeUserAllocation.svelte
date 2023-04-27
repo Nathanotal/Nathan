@@ -1,18 +1,16 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { initialize_neurons } from './initialization.ts'
-	import { get_principal_animations, get_auxiliary_animations, get_user_animations } from './animation.ts'
-	import { simulate_timestep } from './simulation.ts'
-	import Visualization from './Visualization.svelte';
-	import Neurons from './Neurons.svelte';
+	import { initialize_neurons } from './logic/initialization.js'
+	import { get_principal_animations, get_auxiliary_animations, get_user_animations } from './logic/animation.js'
+	import { simulate_timestep } from './logic/simulation.js'
+	import Visualization from './components/Visualization.svelte';
+	import Neurons from './components/Neurons.svelte';
 	import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
 	import type { User, Server, Problem } from '$/types/problem'
-	import ControlCenter from './ControlCenter.svelte';
-	import PerformanceDisplay from './PerformanceDisplay.svelte';
-
+	import ControlCenter from './components/ControlCenter.svelte';
+	import PerformanceDisplay from './components/PerformanceDisplay.svelte';
 
     export let params: EdgeUserAllocationParams;
-	let p: string = params.n_users.toString() + " users, " + params.n_servers.toString() + " servers";
 
 	let users: User[] = params.problem.users; // TODO: use these
 	let servers: Server[] = params.problem.servers;
@@ -42,9 +40,6 @@
             capacity_output,
             utilization_output
         ] = initialize_neurons(params.n_users, params.n_servers);
-
-        // Update the text
-        p = params.n_users.toString() + " users, " + params.n_servers.toString() + " servers";
     }
 
 	function updateVariables(result:SimulationOutput){
@@ -107,7 +102,6 @@
 </script>
 
 <div class='problem'>
-	<p>{p}</p>
 	<div class='topRow'>
 		<div class='neuronWindow'>
 			<Neurons params={params} />

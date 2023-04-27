@@ -1,6 +1,6 @@
 <script lang='ts'>
 	import EdgeUserAllocation from './EdgeUserAllocation.svelte';
-	import { generate_problem } from './initialization.ts'
+	import { generate_problem } from './logic/initialization'
 	import type { EdgeUserAllocationParams } from '$/types/simulation';
 	import type { Problem } from '$/types/problem';
 

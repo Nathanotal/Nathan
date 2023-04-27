@@ -1,6 +1,7 @@
 # Todo
 
 - [ ] Fix WTA css
+- [X] Move around logic
 - [X] Fix server colors
   - [X] Improve
   - [ ] Improve more

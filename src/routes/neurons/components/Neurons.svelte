@@ -1,5 +1,5 @@
 <script lang='ts'>
-    import { initialize_painted_neurons } from './initialization.ts';
+    import { initialize_painted_neurons } from '../logic/initialization.js';
     export let params: EdgeUserAllocationParams;
 	import type { EdgeUserAllocationParams } from '$/types/simulation';
 
@@ -58,4 +58,4 @@
 	</div>
 </div>
 
-<style src="./styles.css" lang="css"></style>
+<style src="../styles.css" lang="css"></style>

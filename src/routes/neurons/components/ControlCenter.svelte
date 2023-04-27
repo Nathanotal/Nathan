@@ -2,7 +2,7 @@
 	import type { EdgeUserAllocationParams } from '$/types/simulation';
     import { createEventDispatcher } from 'svelte';	
 	import type { Problem } from '$/types/problem';
-    import { generate_problem } from './initialization.ts'
+    import { generate_problem } from '../logic/initialization.js'
 	import ControlSlider from './ControlSlider.svelte';
 
     export let params: EdgeUserAllocationParams;
