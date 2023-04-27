@@ -15,16 +15,16 @@
     const stepSize = 25;
 
     const serverColors = [
-        '#FF0000',
-        '#00FF00',
-        '#0000FF',
-        '#FFFF00',
-        '#FF00FF',
-        '#00FFFF',
-        '#FFFFFF',
-        '#000000',
-        '#800080',
-        '#FFA500'
+        '#FF4136',
+        '#FF851B',
+        '#FFDC00',
+        '#2ECC40',
+        '#0074D9',
+        '#B10DC9',
+        '#F012BE',
+        '#7FDBFF',
+        '#01FF70',
+        '#3D9970'
     ];
 
     
