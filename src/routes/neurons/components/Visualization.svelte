@@ -54,7 +54,7 @@
 <style>
 	.basfonster {
 		display: flex;
-		background-color: lightgray;
+		background-color: "#d3d7de";
 		flex-direction: column;
 		width: 100%;
 		height: 100%;

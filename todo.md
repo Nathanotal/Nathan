@@ -1,9 +1,14 @@
 # Todo
 
 - [ ] Add performance display
-  - [ ] Add fitness function
-  - [ ] Make graph
-  - [ ] Make graph animation
+  - [X] Add fitness function
+  - [X] Make graph
+  - [X] Make graph animation
+    - [X] Make x- and y-axis dynamic
+    - [X] Add an element moving up and down
+    - [X] Add a trace
+    - [ ] Fix janky trace
+  - [ ] Reset fitness on some parameter updates
 - [ ] Fix WTA css
   - [ ] Transpose WTA
   - [ ] Fix scaling

@@ -20,8 +20,7 @@
 	<div class='utilization_neurons'>
 		<div class="layer">
 			{#each utilization_neurons as neuron, j}
-				<div class="neuron column_neurons u_{j}" id={neuron.id}>
-					<!-- {neuron.id + 1} -->
+				<div class="neuron u_{j}" id={neuron.id}>
 				</div>
 			{/each}
 		</div>
@@ -31,7 +30,6 @@
 			<div class="layer">
 				{#each layer.neurons as neuron, j}
 					<div class="neuron i{i}{j}" id={neuron.id}>
-						<!-- {neuron.id + 1} -->
 					</div>
 				{/each}
 			</div>
@@ -40,8 +38,7 @@
 	<div class='capacity_neurons'>
 		<div class="layer">
 			{#each capacity_neurons as neuron, j}
-				<div class="neuron column_neurons c_{j}" id={neuron.id}>
-					<!-- {neuron.id + 1} -->
+				<div class="neuron c_{j}" id={neuron.id}>
 				</div>
 			{/each}
 		</div>
@@ -51,7 +48,6 @@
 		<div class="layer_horizontal">
 			{#each wta_neurons as neuron, j}
 				<div class="neuron w_{j}" id={neuron.id}>
-					<!-- {neuron.id + 1} -->
 				</div>
 			{/each}
 		</div>

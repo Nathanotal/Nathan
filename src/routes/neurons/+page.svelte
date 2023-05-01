@@ -5,7 +5,7 @@
 	import type { Problem } from '$/types/problem';
 
 	let params: EdgeUserAllocationParams = {
-		animation_interval: 100,
+		animation_interval: 200,
 		n_users: 6,
 		n_servers: 4,
 		server_capacity: 3,

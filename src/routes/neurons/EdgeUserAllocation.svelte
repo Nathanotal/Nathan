@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { initialize_neurons } from './logic/initialization.js'
-	import { get_principal_animations, get_auxiliary_animations, get_user_animations } from './logic/animation.js'
-	import { simulate_timestep } from './logic/simulation.js'
+	import { get_principal_animations, get_auxiliary_animations, get_user_animations, get_graph_animations } from './logic/animation.js'
+	import { simulate_timestep, getFitness } from './logic/simulation.js'
 	import Visualization from './components/Visualization.svelte';
 	import Neurons from './components/Neurons.svelte';
 	import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
@@ -15,6 +15,10 @@
 	let users: User[] = params.problem.users; // TODO: use these
 	let servers: Server[] = params.problem.servers;
 	let customAnimationLoop: number;
+	let currentFitness: number = 0;
+	let previousMaxFitness: number = 0;
+	let maxFitness: number = 0;
+    let fitnessHistory: number[] = [];
 
 	let animation_interval = params.animation_interval;
 
@@ -44,7 +48,7 @@
         ] = initialize_neurons(params.n_users, params.n_servers);
     }
 
-	function updateVariables(result:SimulationOutput){
+	function updateVariables(result:SimulationOutput): boolean{
 		principal_neurons = result.principal_neurons;
 		user_server_assignments = result.user_server_assignments;
 		wta_output = result.wta_output;
@@ -52,6 +56,16 @@
 		user_count_per_server = result.user_count_per_server;
 		capacity_output = result.capacity_output;
 		utilization_output = result.utilization_output;
+		currentFitness = getFitness(params, user_count_per_server);
+		let fitnessWasImproved:boolean = false;
+		if (currentFitness < maxFitness) {
+			previousMaxFitness = maxFitness;
+			maxFitness = currentFitness;
+			fitnessWasImproved = true; // Side effect, a bit meh
+		};
+		fitnessHistory.push(currentFitness);
+
+		return fitnessWasImproved;
 	}
 
 	function loop(t:number, animations:any[], lastUpdate: number, step: number) {
@@ -73,11 +87,15 @@
 			}
 
 			const result:SimulationOutput = simulate_timestep(simulationParams);
-			updateVariables(result);
+			
+			
+			const fitnessWasImproved: boolean = updateVariables(result);
+			
 			animations = [];
 			animations.push(...get_principal_animations(result, params.vth_P, animation_interval)); // TODO: remove n_servers, n_users
 			animations.push(...get_auxiliary_animations(result, animation_interval));
 			animations.push(...get_user_animations(result, animation_interval, servers));
+			animations.push(...get_graph_animations(fitnessHistory, maxFitness, previousMaxFitness, fitnessWasImproved, animation_interval));
 		}
 		customAnimationLoop = requestAnimationFrame((t) => loop(t, animations, lastUpdate, step));
 	}
@@ -118,7 +136,7 @@
 			<ControlCenter bind:params={params} on:updateParams={(e) => updateParams(e)}/>
 		</div>
 		<div class='performanceWindow'>
-			<PerformanceDisplay params={params} userCountPerServer={user_count_per_server} />
+			<PerformanceDisplay currentFitness={currentFitness} maxFitness={maxFitness} fitnessHistory={fitnessHistory} />
 		</div>
 	</div>
 	
@@ -130,38 +148,33 @@
 		display: flex;
 		height: 100%;
 		width: 100%; 
-		background: green;
+		background: "#d3d7de";
 		flex-direction: column;
 	}
 	.neuronWindow {
 		display: flex;
 		flex: 1;
-		background-color: aquamarine;
 	}
 	.visualizationWindow {
 		display: flex;
 		flex: 1;
-		background-color: aqua;
 	}
 	.controlWindow {
 		display: flex;
 		width: 100%;
+        max-height: 100%;
 		flex: 1;
-		background-color: green;
 	}
 	.performanceWindow {
 		display: flex;
 		flex: 1;
-		background-color: aqua;
 	}
 	.topRow {
 		display: flex;
 		flex: 1;
-		background-color: aqua;
 	}
 	.bottomRow {
 		display: flex;
 		flex: 1;
-		background-color: aqua;
 	}
 </style>

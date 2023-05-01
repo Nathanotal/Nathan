@@ -73,10 +73,10 @@
 <style>
     .paramGrid {
         flex: 1;
-        padding: 16px;
+        padding: 10px;
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        grid-gap: 16px;
-        background-color: azure;
+        grid-template-columns: 0.8fr 0.8fr;
+        grid-gap: 10px;
+        background-color: "#d3d7de";
     }
 </style>

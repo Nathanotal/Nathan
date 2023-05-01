@@ -10,5 +10,5 @@
         <span>{paramControls[paramType].alias}</span>
         <span>{params[paramType]}</span>
     </div>
-    <input type="range" min={paramControls[paramType].min} max={paramControls[paramType].max} bind:value={params[paramType]} class="range" step={paramControls[paramType].step} on:input={(event) => update_params(event, paramType)}/>
+    <input type="range" min={paramControls[paramType].min} max={paramControls[paramType].max} bind:value={params[paramType]} class="range networkSlider" step={paramControls[paramType].step} on:input={(event) => update_params(event, paramType)}/>
 </div>

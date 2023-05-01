@@ -1,25 +1,23 @@
 <script lang='ts'>
-	import { getFitness } from '../logic/simulation.js';
-    import type { EdgeUserAllocationParams } from '$/types/simulation';
-	import type { Matrix } from 'mathjs';
-    
-    export let params: EdgeUserAllocationParams;
-    export let userCountPerServer: Matrix;
-
-    let currentFitness: number = 0;
-    let fitnessHistory: number[] = [];
-
-    // Every time assignments are updated, calculate fitness and update fitness history
-    $: {
-        currentFitness = getFitness(params, userCountPerServer);
-        fitnessHistory = [...fitnessHistory, currentFitness];
-    }
+    export let currentFitness:number;
+    export let maxFitness:number;
+    export let fitnessHistory:number[];
 
 </script>
 
 <div class='displayContainer'>
-    <h2>Current fitness: {currentFitness}</h2>
-    <!-- <h2>Historical fitness: {fitnessHistory}</h2> -->
+    <!-- Make a graph which occupies the rest of the space -->
+    <div class='graph'>
+        <div class='graphSvg'>
+            <svg class='leSvg' viewBox='0 0 200 100'>
+                <!-- <path d='M 0 0 L 100 100' stroke='black' stroke-width='2' fill='none'></path> -->
+                <!-- <path fill="rgba(75, 192, 192, 0.2)" stroke="rgba(75, 192, 192, 1)" stroke-width="2"></path> -->
+                <path d='' stroke="black" stroke-width="4" id='currentPath'></path>
+                <path d='' stroke="black" stroke-width="4" id='currentSegment'></path>
+            </svg>
+        </div>
+        <div class='performanceIndicator'></div>
+    </div>
 </div>
 
 <style>
@@ -31,5 +29,32 @@
         width: 100%;
         height: 100%;
         padding: 16px;
+        background-color: "#d3d7de";
+        
     }
+    .graph {
+        display: flex;
+        position: relative;
+        width: 80%; /* TODO: change to 100 */
+        /* height: 50%; */
+        background-color: white;
+    }
+    .performanceIndicator {
+        position: absolute;
+        width: 10px; /* TODO: scale */
+        height: 10px;
+        background-color: red;
+        right: 0;
+        padding: 0;
+    }
+    .graphSvg {
+        width: 100%;
+        height: 100%;
+        background: white;
+    }
+    .leSvg{
+        height: 100%;
+        background-color: white;
+    }
+
 </style>
