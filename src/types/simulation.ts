@@ -1,4 +1,4 @@
-import type { Matrix } from 'mathjs' // TODO: fix
+import type { Matrix } from 'mathjs'
 import type { Problem } from './problem.type';
 
 export type SimulationInput = {
@@ -43,5 +43,6 @@ export type EdgeUserAllocationParams = {
     wta_inhibition:number, // -2
     capacity_inhibition:number, // -4
     utilization_excitation:number, // 1
-    problem:Problem 
+    problem:Problem ,
+    server_range:number, // 0.3
 }

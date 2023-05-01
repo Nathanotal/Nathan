@@ -15,7 +15,8 @@
 		wta_inhibition: -2,
 		capacity_inhibition: -4,
 		utilization_excitation: 1,
-		problem: null
+		problem: null,
+		server_range: 0.6,
 	}
 	const problem:Problem = generate_problem(params);
 	params.problem = problem;

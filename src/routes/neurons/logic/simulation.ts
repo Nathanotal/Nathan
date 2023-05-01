@@ -1,4 +1,4 @@
-import { zeros, ones, add, matrix, multiply, max, sum } from 'mathjs'
+import { zeros, ones, add, matrix, multiply, max, sum, dotMultiply } from 'mathjs'
 import type { SimulationInput, SimulationOutput, EdgeUserAllocationParams } from '$/types/simulation';
 import type { Matrix } from 'mathjs' // TODO: fix
 
@@ -35,8 +35,9 @@ export function simulate_timestep(params:SimulationInput) {
     total_input = add(total_input, noise);
 
     // Calculate principal network state
-    params.principal_neurons = multiply(params.principal_neurons, 0.8);
-    params.principal_neurons = add(params.principal_neurons, total_input);
+    params.principal_neurons = multiply(params.principal_neurons, 0.8); // Leak
+    params.principal_neurons = add(params.principal_neurons, total_input); // Add input
+    params.principal_neurons = dotMultiply(params.principal_neurons, params.problem.constraintMatrix); // Satisfy constraints
 
     // Get firing neurons (neurons with a charge above threshold)
     const firing_neurons = zeros(params.n_servers, params.n_users);

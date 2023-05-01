@@ -88,7 +88,6 @@
 
 			const result:SimulationOutput = simulate_timestep(simulationParams);
 			
-			
 			const fitnessWasImproved: boolean = updateVariables(result);
 			
 			animations = [];

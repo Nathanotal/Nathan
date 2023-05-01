@@ -29,8 +29,15 @@
 		{#each layers as layer, i}
 			<div class="layer">
 				{#each layer.neurons as neuron, j}
-					<div class="neuron i{i}{j}" id={neuron.id}>
-					</div>
+					{#if params.problem.constraintMatrix.get([j,i]) == 1}
+						<div class="neuron i{i}{j}" id={neuron.id}>
+						</div>
+					{:else}
+					<!-- TODO: fix this -->
+						<div class="neuron i{i}{j}" style="visibility: hidden" id={neuron.id}>
+							
+						</div>
+					{/if}
 				{/each}
 			</div>
 		{/each}
@@ -39,6 +46,10 @@
 		<div class="layer">
 			{#each capacity_neurons as neuron, j}
 				<div class="neuron c_{j}" id={neuron.id}>
+					<!-- A little colored indicator to show which server -->
+					<!-- the capacity neuron is associated with -->
+					<div class="indicator" style="background-color: rgb({params.problem.servers[j].color[0]}, {params.problem.servers[j].color[1]}, {params.problem.servers[j].color[2]});">
+					</div>
 				</div>
 			{/each}
 		</div>

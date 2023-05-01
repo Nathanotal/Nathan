@@ -1,6 +1,9 @@
+import type { Matrix } from 'mathjs'
+
 export type Problem = {
     users: User[],
-    servers: Server[]
+    servers: Server[],
+    constraintMatrix: Matrix
 }
 
 export type User = {

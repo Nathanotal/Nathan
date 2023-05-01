@@ -63,10 +63,12 @@ export function initialize_painted_neurons(n_users: number, n_servers: number){
 export function generate_problem(params: any): Problem {
 	let servers = generate_servers(params);
 	let users = generate_users(params);
+	let constraintMatrix = calculate_constraint_matrix(users, servers);
 
 	return {
 		users: users,
-		servers: servers
+		servers: servers,
+		constraintMatrix: constraintMatrix
 	}
 }
 
@@ -100,7 +102,7 @@ function generate_servers(params:any){
 			y: y,
 			capacity: 2,
 			allocated_users: [],
-			range: 0.3,
+			range: params.server_range,
 			color: color,
 			coverageColor: color
 		})
@@ -122,6 +124,25 @@ function generate_users(params:any){
 	}
 
 	return users
+}
+
+function calculate_constraint_matrix(users: User[], servers: Server[]){
+	let constraintMatrix: Matrix = matrix(zeros(servers.length, users.length));
+
+	for (let i = 0; i < servers.length; i++){
+		for (let j = 0; j < users.length; j++){
+			if (isInRange(users[j], servers[i])){
+				constraintMatrix.set([i, j], 1);
+			}
+		}
+	}
+
+	return constraintMatrix
+}
+
+function isInRange(user: User, server: Server){
+	let distance = Math.sqrt(Math.pow(user.x - server.x, 2) + Math.pow(user.y - server.y, 2));
+	return distance <= server.range
 }
 
 function get_random_position(){

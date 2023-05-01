@@ -44,7 +44,7 @@
 		{#each servers  as server, i}
 			<div class='server server_{i}' style='left: {server.x * visualisering_width}px; top: {server.y * visualisering_height}px; background-color: rgb({server.color[0]}, {server.color[1]}, {server.color[2]}); '>
 			</div>
-			<div class='server_radius server_radius_{i}' style='left: {server.x * visualisering_width}px; top: {server.y * visualisering_height}px; background-color: rgba({server.coverageColor[0]}, {server.coverageColor[1]}, {server.coverageColor[2]}, 0.05); '>
+			<div class='server_radius server_radius_{i}' style='width:{2*server.range*visualisering_width}px; height:{2*server.range*visualisering_height}px; left: {server.x * visualisering_width}px; top: {server.y * visualisering_height}px; background-color: rgba({server.coverageColor[0]}, {server.coverageColor[1]}, {server.coverageColor[2]}, 0.05); '>
 			</div>
 		{/each}
 	</div>
@@ -59,6 +59,7 @@
 		width: 100%;
 		height: 100%;
 		overflow: hidden;
+		min-width: 100%;
 	}
 	.neuroner {
 		flex: 1;
@@ -88,10 +89,7 @@
 
 	}
 	.server_radius {
-		/* TODO: make dynamic */
 		position: absolute;
-		min-width: 300px;
-		min-height: 300px; 
 		border: 2px dotted black; /* Add a solid border */
 		border-radius: 50%;
 		transform: translate(-50%, -50%);

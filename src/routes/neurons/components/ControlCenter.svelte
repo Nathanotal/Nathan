@@ -19,10 +19,11 @@
         wta_inhibition: { min: -20, max: 0, step: 1, alias: 'WTA inhibition' },
         capacity_inhibition: { min: -20, max: 0, step: 1, alias: 'Capacity inhibition' },
         utilization_excitation: { min: 0, max: 20, step: 1, alias: 'Utilization excitation' },
+        server_range: { min: 0, max: 1, step: 0.1, alias: 'Server Range' },
         animation_interval: { min: 0, max: 1000, step: 100, alias: 'Simulation speed' } // TODO: fix display
     }
 
-    function update_params(event: any, paramType: 'n_users' | 'n_servers' | 'server_capacity' | 'vth_P' | 'noise_probability' | 'noise_strength' | 'wta_inhibition' | 'capacity_inhibition' | 'utilization_excitation' | 'animation_interval') {
+    function update_params(event: any, paramType: 'n_users' | 'n_servers' | 'server_capacity' | 'vth_P' | 'noise_probability' | 'noise_strength' | 'wta_inhibition' | 'capacity_inhibition' | 'utilization_excitation' | 'server_range' | 'animation_interval') {
         let newParams: EdgeUserAllocationParams = { ...params };
         switch (paramType) {
 			case 'n_users':
@@ -31,6 +32,10 @@
 				break;
 			case 'n_servers':
 				newParams.n_servers = Number(event.target.value);
+                newParams.problem = generate_problem(newParams);
+				break;
+			case 'server_range':
+				newParams.server_range = Number(event.target.value);
                 newParams.problem = generate_problem(newParams);
 				break;
 			case 'server_capacity':
