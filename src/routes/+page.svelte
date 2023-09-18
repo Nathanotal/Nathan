@@ -17,7 +17,7 @@
 		</a>
 	</div>
 	<div class="icon-item">
-		<a href="/problem">
+		<a href="/about">
 			<i class="fa-solid fa-address-card navigation_icon"></i>
 			<p>About me</p>
 		</a>
