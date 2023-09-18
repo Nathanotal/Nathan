@@ -6,6 +6,9 @@
 	import { inject } from '@vercel/analytics';
 	
 	inject({ mode: dev ? 'development' : 'production' });
+
+	console.log(dev);
+	console.log({ mode: dev ? 'development' : 'production' });
 </script>
 
 <Header />
