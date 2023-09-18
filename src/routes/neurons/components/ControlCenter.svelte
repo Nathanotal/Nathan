@@ -10,9 +10,9 @@
     const dispatch = createEventDispatcher();
 
     const paramControls: { [key: string]: { min: number, max: number, step: number, alias:string } } = {
-        n_users: { min: 1, max: 50, step: 1, alias: 'Users' },
+        n_users: { min: 1, max: 15, step: 1, alias: 'Users' },
         n_servers: { min: 1, max: 10, step: 1, alias: 'Servers' },
-        server_capacity: { min: 1, max: 50, step: 1, alias: 'Server capacity' },
+        server_capacity: { min: 1, max: 15, step: 1, alias: 'Server capacity' },
         vth_P: { min: 1, max: 10, step: 1, alias: 'Principal neuron threshold' },
         noise_probability: { min: 0, max: 1, step: 0.05, alias: 'Noise probability' },
         noise_strength: { min: 0, max: 10, step: 0.5, alias: 'Noise strength' },
@@ -20,7 +20,7 @@
         capacity_inhibition: { min: -20, max: 0, step: 1, alias: 'Capacity inhibition' },
         utilization_excitation: { min: 0, max: 20, step: 1, alias: 'Utilization excitation' },
         server_range: { min: 0, max: 1, step: 0.1, alias: 'Server Range' },
-        animation_interval: { min: 0, max: 1000, step: 100, alias: 'Simulation speed' } // TODO: fix display
+        animation_interval: { min: 200, max: 1000, step: 100, alias: 'Simulation speed' } // TODO: fix display
     }
 
     function update_params(event: any, paramType: 'n_users' | 'n_servers' | 'server_capacity' | 'vth_P' | 'noise_probability' | 'noise_strength' | 'wta_inhibition' | 'capacity_inhibition' | 'utilization_excitation' | 'server_range' | 'animation_interval') {
