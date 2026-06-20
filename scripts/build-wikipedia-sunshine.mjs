@@ -91,6 +91,7 @@ function queryVariants(city) {
 	const variants = new Set([city, base]);
 	if (/ City$/.test(base)) variants.add(base.replace(/ City$/, '').trim());
 	for (const v of [...variants]) {
+		variants.add(v.replace(/-/g, ' ')); // "Dar-es-Salaam" -> "Dar es Salaam"
 		const ascii = v.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '');
 		variants.add(ascii);
 	}
@@ -141,51 +142,78 @@ console.log('Parsed', records.length, 'city rows from Wikipedia');
 
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
 const all = JSON.parse(readFileSync(join(CACHE, 'all-the-cities.json'), 'utf8'));
-const byName = new Map(); // normalized name -> [{cc, ccName, lat, lon, pop}]
+const byName = new Map(); // normalized name -> [{cc, lat, lon, pop}]
 for (const c of all) {
 	const k = norm(c.name);
 	let arr = byName.get(k);
 	if (!arr) byName.set(k, (arr = []));
-	let ccName = c.country;
-	try {
-		ccName = regionNames.of(c.country) || c.country;
-	} catch {
-		/* keep code */
-	}
-	arr.push({ ccName, lat: c.lat, lon: c.lon, pop: c.population });
+	arr.push({ cc: c.country, lat: c.lat, lon: c.lon, pop: c.population });
 }
 
-// A few country-name aliases between Wikipedia and Intl.DisplayNames.
-const countryAlias = {
-	'ivory coast': "cote d'ivoire",
-	'united states': 'united states',
-	'czech republic': 'czechia',
-	'democratic republic of the congo': 'congo - kinshasa',
-	'republic of the congo': 'congo - brazzaville',
-	'south korea': 'south korea',
-	'north korea': 'north korea',
-	'russia': 'russia',
-	'cape verde': 'cape verde',
-	'myanmar': 'myanmar (burma)'
-};
-const countryMatch = (wikiCountry, ccName) => {
-	const a = norm(wikiCountry);
-	const b = norm(ccName);
-	return a === b || countryAlias[a] === b || b.includes(a) || a.includes(b);
+// Map a Wikipedia country name -> ISO2 code. Most resolve straight through
+// Intl.DisplayNames; the alias table covers spellings/territories it misses.
+const nameToCC = new Map();
+for (const cc of new Set(all.map((c) => c.country))) {
+	try {
+		const nm = regionNames.of(cc);
+		if (nm) nameToCC.set(norm(nm), cc);
+	} catch {
+		/* skip */
+	}
+}
+for (const [k, v] of Object.entries({
+	'ivory coast': 'CI',
+	'czech republic': 'CZ',
+	'democratic republic of the congo': 'CD',
+	'republic of the congo': 'CG',
+	congo: 'CG',
+	'south korea': 'KR',
+	'north korea': 'KP',
+	myanmar: 'MM',
+	'cape verde': 'CV',
+	russia: 'RU',
+	'united states': 'US',
+	'usa (american samoa)': 'AS',
+	'american samoa': 'AS',
+	'saint pierre and miquelon': 'PM',
+	'falkland islands': 'FK',
+	'puerto rico': 'PR',
+	'french guiana': 'GF',
+	'united kingdom': 'GB',
+	tanzania: 'TZ',
+	vietnam: 'VN',
+	laos: 'LA',
+	syria: 'SY',
+	moldova: 'MD',
+	bolivia: 'BO',
+	venezuela: 'VE',
+	iran: 'IR',
+	taiwan: 'TW'
+}))
+	nameToCC.set(k, v);
+// Some Wikipedia "countries" cover several ISO codes (special admin regions).
+const ccExtra = { china: ['CN', 'HK', 'MO'] };
+const ccFor = (country) => {
+	const k = norm(country);
+	if (ccExtra[k]) return ccExtra[k];
+	const c = nameToCC.get(k);
+	return c ? [c] : null;
 };
 
 const geoCache = existsSync(GEO_CACHE) ? JSON.parse(readFileSync(GEO_CACHE, 'utf8')) : {};
 
-function localMatch(city, country) {
+// Local match: require the country code to agree so "Seville" can't resolve to
+// Seville, Ohio. Returns null when no same-country candidate exists.
+function localMatch(city, expectCC) {
 	const cands = byName.get(norm(city));
 	if (!cands || !cands.length) return null;
-	const inCountry = cands.filter((c) => countryMatch(country, c.ccName));
-	const pool = inCountry.length ? inCountry : cands;
+	const pool = expectCC ? cands.filter((c) => expectCC.includes(c.cc)) : cands;
+	if (!pool.length) return null;
 	return pool.reduce((a, b) => (b.pop > a.pop ? b : a));
 }
 
-async function apiGeocode(city, country) {
-	const key = `${city}|${country}`;
+async function apiGeocode(city, expectCC) {
+	const key = `${city}|${expectCC ? expectCC.join(',') : ''}`;
 	if (geoCache[key] !== undefined) return geoCache[key];
 	const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
 		city
@@ -196,10 +224,9 @@ async function apiGeocode(city, country) {
 		if (res.ok) {
 			const j = await res.json();
 			const list = j.results || [];
-			const inC = list.filter((r) => countryMatch(country, r.country || ''));
-			const pick = (inC.length ? inC : list).sort(
-				(a, b) => (b.population || 0) - (a.population || 0)
-			)[0];
+			const inC = expectCC ? list.filter((r) => expectCC.includes(r.country_code)) : list;
+			const pool = inC.length ? inC : expectCC ? [] : list; // don't accept wrong country
+			const pick = pool.sort((a, b) => (b.population || 0) - (a.population || 0))[0];
 			if (pick) result = { lat: pick.latitude, lon: pick.longitude, pop: pick.population || 0 };
 		}
 	} catch {
@@ -216,12 +243,13 @@ let local = 0;
 let api = 0;
 let missed = 0;
 for (const r of records) {
+	const expectCC = ccFor(r.country);
 	const variants = queryVariants(r.city);
 	let g = null;
-	for (const v of variants) if ((g = localMatch(v, r.country))) break;
+	for (const v of variants) if ((g = localMatch(v, expectCC))) break;
 	if (g) local++;
 	else {
-		for (const v of variants) if ((g = await apiGeocode(v, r.country))) break;
+		for (const v of variants) if ((g = await apiGeocode(v, expectCC))) break;
 		if (g) api++;
 	}
 	if (!g) {

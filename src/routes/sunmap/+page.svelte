@@ -699,7 +699,8 @@
 			<p class="footnote">
 				Real recorded sunshine for {sunNames[k]} — average bright-sunshine hours per day for each
 				calendar month ({sunMeta?.period ?? 'climate normals'}). Source:
-				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>.
+				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>{#if sunRad[k][curMonth] != null}; solar radiation from
+					<a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a> (1991–2020){/if}.
 			</p>
 		</div>
 	{:else if selected}
