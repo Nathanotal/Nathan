@@ -7,11 +7,18 @@
 		daylightHours,
 		annualAverage,
 		colorForHours,
+		colorForSunshine,
+		SUNSHINE_MAX,
+		monthIndex,
 		dateLabel,
 		solarDeclination
 	} from './sun';
 
 	type Place = { name: string; country?: string; lat: number; lon: number };
+
+	// Map mode: astronomical max daylight vs. real recorded sunshine.
+	type Mode = 'astro' | 'real';
+	let mode: Mode = 'astro';
 
 	// --- State -------------------------------------------------------------
 	let selectedDay = 172; // ~21 June, northern summer solstice
@@ -41,6 +48,21 @@
 	let dataReady = false;
 	let loading = true;
 	let loadError = '';
+
+	// --- Real recorded sunshine dataset (Open-Meteo / ERA5) ----------------
+	type SunMeta = { source: string; url: string; period: string; note: string };
+	let sunReady = false;
+	let sunN = 0;
+	let sunNames: string[] = [];
+	let sunCountry: string[] = [];
+	let sunLat = new Float32Array(0);
+	let sunLon = new Float32Array(0);
+	let sunVals: number[][] = []; // [city][month] mean daily sunshine hours
+	let sunRad: number[][] = []; // [city][month] mean daily shortwave radiation MJ/m²
+	let sunMeta: SunMeta | null = null;
+	let selectedSunIdx: number | null = null; // index into the sunshine dataset
+
+	$: curMonth = monthIndex(selectedDay);
 
 	// Daylight colour depends only on latitude + day, so precompute a colour for
 	// each 0.25° latitude band once per day and reuse it for every city.
@@ -89,11 +111,56 @@
 		);
 	}
 
+	function sunFmt(h: number | null): string {
+		if (h == null) return 'no data';
+		const m = Math.round(h * 60);
+		return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+	}
+
+	function sunInfoHtml(k: number): string {
+		const v = sunVals[k][curMonth];
+		return (
+			`<div style="text-align:center;min-width:140px">` +
+			`<strong>${sunNames[k]}</strong>` +
+			`<br><span style="color:#64748b">${sunCountry[k]}</span>` +
+			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${sunFmt(v)}</span>` +
+			`<br><span style="color:#64748b">avg sunshine/day in ${MONTHS[curMonth].name}</span>` +
+			`</div>`
+		);
+	}
+
+	function setMode(m: Mode) {
+		if (mode === m) return;
+		mode = m;
+		if (map) map.closePopup();
+	}
+
+	function sunAnnual(k: number): number {
+		const v = sunVals[k];
+		let s = 0;
+		let c = 0;
+		for (const x of v) if (x != null) {
+			s += x;
+			c++;
+		}
+		return c ? s / c : 0;
+	}
+
 	function choose(p: Place, openPopup = true) {
 		selected = p;
+		selectedSunIdx = null;
 		if (mapReady && openPopup && infoPopup) {
 			map.panTo([p.lat, p.lon], { animate: true });
 			infoPopup.setLatLng([p.lat, p.lon]).setContent(infoHtml(p)).openOn(map);
+		}
+	}
+
+	function chooseSun(k: number, openPopup = true) {
+		selectedSunIdx = k;
+		selected = { name: sunNames[k], country: sunCountry[k], lat: sunLat[k], lon: sunLon[k] };
+		if (mapReady && openPopup && infoPopup) {
+			map.panTo([sunLat[k], sunLon[k]], { animate: true });
+			infoPopup.setLatLng([sunLat[k], sunLon[k]]).setContent(sunInfoHtml(k)).openOn(map);
 		}
 	}
 
@@ -126,10 +193,12 @@
 			}).addTo(map);
 	}
 
-	// Recolour + repaint whenever the day or selection changes.
+	// Recolour + repaint whenever the day, mode or selection changes.
 	$: {
 		selectedDay;
 		selected;
+		mode;
+		curMonth;
 		if (mapReady && dataReady) {
 			rebuildColorTable(selectedDay);
 			scheduleRender();
@@ -186,6 +255,25 @@
 			loading = false;
 			loadError = e instanceof Error ? e.message : 'failed to load cities';
 		}
+
+		// Real recorded sunshine climatology (optional overlay mode).
+		try {
+			const res = await fetch('/sunshine.json');
+			if (res.ok) {
+				const s = await res.json();
+				sunN = s.n;
+				sunNames = s.names.split('\n');
+				sunCountry = s.country.split('\n');
+				sunLat = Float32Array.from(s.lat);
+				sunLon = Float32Array.from(s.lon);
+				sunVals = s.sun;
+				sunRad = s.rad;
+				sunMeta = s.meta;
+				sunReady = sunN > 0;
+			}
+		} catch {
+			sunReady = false;
+		}
 	});
 
 	// Custom Leaflet layer that draws all visible cities onto a single canvas.
@@ -226,6 +314,43 @@
 				const west = b.getWest();
 				const east = b.getEast();
 				const zoom = m.getZoom();
+
+				// Real recorded sunshine: far fewer points, drawn as bold dots
+				// coloured by the selected month's average sunshine hours.
+				if (mode === 'real' && sunReady) {
+					const rr = zoom < 4 ? 2.6 : zoom < 6 ? 3.6 : 4.6;
+					const month = curMonth;
+					for (let k = 0; k < sunN; k++) {
+						const la = sunLat[k];
+						if (la < south || la > north) continue;
+						const lo0 = sunLon[k];
+						ctx.fillStyle = colorForSunshine(sunVals[k][month]);
+						for (let w = -360; w <= 360; w += 360) {
+							const lon = lo0 + w;
+							if (lon < west || lon > east) continue;
+							const p = m.latLngToContainerPoint([la, lon]);
+							ctx.beginPath();
+							ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+							ctx.fill();
+						}
+					}
+					if (selectedSunIdx != null) {
+						const la = sunLat[selectedSunIdx];
+						const lo0 = sunLon[selectedSunIdx];
+						for (let w = -360; w <= 360; w += 360) {
+							const lon = lo0 + w;
+							if (lon < west || lon > east) continue;
+							const p = m.latLngToContainerPoint([la, lon]);
+							ctx.beginPath();
+							ctx.arc(p.x, p.y, rr + 3, 0, Math.PI * 2);
+							ctx.lineWidth = 2;
+							ctx.strokeStyle = '#ffffff';
+							ctx.stroke();
+						}
+					}
+					return;
+				}
+
 				const r = zoom < 4 ? 0.8 : zoom < 6 ? 1.4 : 2.2;
 				const d = r * 2;
 
@@ -267,6 +392,34 @@
 	function onMapClick(e: any) {
 		if (!dataReady) return;
 		const m = map;
+
+		// Real-sunshine mode: hit-test the (much smaller) sunshine dataset.
+		if (mode === 'real' && sunReady) {
+			const rb = m.getBounds();
+			const cp0 = e.containerPoint;
+			let bestK = -1;
+			let bestDist = 16 * 16;
+			for (let k = 0; k < sunN; k++) {
+				const la = sunLat[k];
+				if (la < rb.getSouth() || la > rb.getNorth()) continue;
+				const lo0 = sunLon[k];
+				for (let w = -360; w <= 360; w += 360) {
+					const lon = lo0 + w;
+					if (lon < rb.getWest() || lon > rb.getEast()) continue;
+					const p = m.latLngToContainerPoint([la, lon]);
+					const dx = p.x - cp0.x;
+					const dy = p.y - cp0.y;
+					const dd = dx * dx + dy * dy;
+					if (dd < bestDist) {
+						bestDist = dd;
+						bestK = k;
+					}
+				}
+			}
+			if (bestK >= 0) chooseSun(bestK);
+			return;
+		}
+
 		const b = m.getBounds();
 		const south = b.getSouth();
 		const north = b.getNorth();
@@ -316,6 +469,37 @@
 		return d * sortDir;
 	});
 
+	// Real-sunshine table: the most populous cities, capped for a sane DOM size.
+	const SUN_TABLE_MAX = 120;
+	let sunSortKey: 'pop' | 'name' | 'annual' = 'pop';
+	let sunSortDir: 1 | -1 = 1;
+
+	$: sunTable = sunReady
+		? Array.from({ length: Math.min(sunN, SUN_TABLE_MAX) }, (_, k) => ({
+				k,
+				name: sunNames[k],
+				country: sunCountry[k],
+				months: sunVals[k],
+				annual: sunAnnual(k)
+			}))
+		: [];
+
+	$: sunSortedTable = [...sunTable].sort((a, b) => {
+		let d = 0;
+		if (sunSortKey === 'pop') d = a.k - b.k;
+		else if (sunSortKey === 'name') d = a.name.localeCompare(b.name);
+		else d = a.annual - b.annual;
+		return d * sunSortDir;
+	});
+
+	function setSunSort(key: 'pop' | 'name' | 'annual') {
+		if (sunSortKey === key) sunSortDir = (sunSortDir * -1) as 1 | -1;
+		else {
+			sunSortKey = key;
+			sunSortDir = key === 'name' || key === 'pop' ? 1 : -1;
+		}
+	}
+
 	function setSort(key: 'lat' | 'name' | 'annual') {
 		if (sortKey === key) sortDir = (sortDir * -1) as 1 | -1;
 		else {
@@ -346,6 +530,7 @@
 	];
 
 	const legendStops = [0, 3, 6, 9, 12, 15, 18, 21, 24];
+	const sunshineStops = [0, 2, 4, 6, 8, 10, SUNSHINE_MAX];
 	const nf = new Intl.NumberFormat('en-US');
 </script>
 
@@ -387,6 +572,37 @@
 		</div>
 	</div>
 
+	<!-- Mode toggle: astronomical daylight vs. real recorded sunshine -->
+	<div class="mode-toggle card">
+		<div class="seg" role="group" aria-label="Map mode">
+			<button class="seg-btn" class:on={mode === 'astro'} on:click={() => setMode('astro')}>
+				☀️ Astronomical daylight
+			</button>
+			<button
+				class="seg-btn"
+				class:on={mode === 'real'}
+				disabled={!sunReady}
+				title={sunReady ? '' : 'Sunshine data still loading'}
+				on:click={() => setMode('real')}
+			>
+				🛰️ Real recorded sunshine
+			</button>
+		</div>
+		<p class="mode-desc">
+			{#if mode === 'astro'}
+				<strong>Maximum possible daylight</strong> — hours between sunrise and sunset from astronomy
+				alone (clear-sky, latitude + date). Every one of {nf.format(nCities || 169137)} cities is plotted.
+			{:else}
+				<strong>Real recorded sunshine</strong> — actual average hours of bright sunshine per day, from
+				the
+				<a href={sunMeta?.url ?? 'https://open-meteo.com/en/docs/historical-weather-api'}
+					target="_blank"
+					rel="noopener">Open-Meteo Historical Weather API (ERA5 reanalysis)</a
+				>, {sunMeta?.period ?? '2019–2023 average'}. {nf.format(sunN)} largest cities.
+			{/if}
+		</p>
+	</div>
+
 	<!-- Map -->
 	<div class="map-card card">
 		<div class="map-holder">
@@ -398,29 +614,96 @@
 			{/if}
 		</div>
 		<div class="legend">
-			<span class="legend-label">Daylight:</span>
+			<span class="legend-label">{mode === 'real' ? 'Sunshine/day:' : 'Daylight:'}</span>
 			<div class="legend-scale">
 				<div class="legend-bar">
-					{#each legendStops as s, i}
-						{#if i < legendStops.length - 1}
-							<div
-								class="legend-seg"
-								style="background: linear-gradient(to right, {colorForHours(s)}, {colorForHours(
-									legendStops[i + 1]
-								)});"
-							/>
-						{/if}
-					{/each}
+					{#if mode === 'real'}
+						{#each sunshineStops as s, i}
+							{#if i < sunshineStops.length - 1}
+								<div
+									class="legend-seg"
+									style="background: linear-gradient(to right, {colorForSunshine(
+										s
+									)}, {colorForSunshine(sunshineStops[i + 1])});"
+								/>
+							{/if}
+						{/each}
+					{:else}
+						{#each legendStops as s, i}
+							{#if i < legendStops.length - 1}
+								<div
+									class="legend-seg"
+									style="background: linear-gradient(to right, {colorForHours(s)}, {colorForHours(
+										legendStops[i + 1]
+									)});"
+								/>
+							{/if}
+						{/each}
+					{/if}
 				</div>
 				<div class="legend-ticks">
-					<span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span>
+					{#if mode === 'real'}
+						<span>0h</span><span>4h</span><span>8h</span><span>12h+</span>
+					{:else}
+						<span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span>
+					{/if}
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Selected city detail -->
-	{#if selected}
+	{#if mode === 'real' && selectedSunIdx != null}
+		{@const k = selectedSunIdx}
+		<div class="detail card">
+			<div class="detail-head">
+				<h2>{sunNames[k]}, {sunCountry[k]}</h2>
+				<span class="coords">
+					{Math.abs(sunLat[k]).toFixed(2)}°{sunLat[k] >= 0 ? 'N' : 'S'},
+					{Math.abs(sunLon[k]).toFixed(2)}°{sunLon[k] >= 0 ? 'E' : 'W'}
+				</span>
+			</div>
+			<div class="detail-stats">
+				<div class="stat">
+					<span class="stat-val">{sunFmt(sunVals[k][curMonth])}</span>
+					<span class="stat-lbl">avg sun/day in {MONTHS[curMonth].name}</span>
+				</div>
+				<div class="stat">
+					<span class="stat-val">{sunAnnual(k).toFixed(1)}h</span>
+					<span class="stat-lbl">yearly daily average</span>
+				</div>
+				{#if sunRad[k][curMonth] != null}
+					<div class="stat">
+						<span class="stat-val">{sunRad[k][curMonth]?.toFixed(1)}</span>
+						<span class="stat-lbl">MJ/m²/day radiation</span>
+					</div>
+				{/if}
+			</div>
+			<!-- Real monthly sunshine bar chart -->
+			<div class="year-chart">
+				{#each MONTHS as m, mi}
+					{@const v = sunVals[k][mi]}
+					<div class="bar-col" title="{m.name}: {sunFmt(v)}">
+						<div class="bar-track">
+							<div
+								class="bar-fill"
+								style="height: {((v ?? 0) / SUNSHINE_MAX) * 100}%; background: {colorForSunshine(
+									v ?? 0
+								)};"
+							/>
+						</div>
+						<span class="bar-lbl">{m.short}</span>
+					</div>
+				{/each}
+			</div>
+			<p class="footnote">
+				Real recorded sunshine for {sunNames[k]} — average bright-sunshine hours per day for each
+				calendar month, {sunMeta?.period ?? '2019–2023'}. Source:
+				<a href={sunMeta?.url} target="_blank" rel="noopener">Open-Meteo Historical Weather API</a> (ERA5
+				reanalysis).
+			</p>
+		</div>
+	{:else if selected}
 		{@const todays = daylightHours(selected.lat, selectedDay)}
 		<div class="detail card">
 			<div class="detail-head">
@@ -458,6 +741,65 @@
 		</div>
 	{/if}
 
+	<!-- Real recorded sunshine table -->
+	{#if mode === 'real' && sunReady}
+		<div class="table-card card">
+			<h2>Most populous cities — recorded sunshine hours per day by month</h2>
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th class="sortable" on:click={() => setSunSort('name')}>
+								City {sunSortKey === 'name' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
+							</th>
+							<th class="sortable num" on:click={() => setSunSort('pop')}>
+								Rank {sunSortKey === 'pop' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
+							</th>
+							{#each MONTHS as m}
+								<th class="num">{m.short}</th>
+							{/each}
+							<th class="sortable num" on:click={() => setSunSort('annual')}>
+								Avg {sunSortKey === 'annual' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each sunSortedTable as row}
+							<tr class:active={selectedSunIdx === row.k} on:click={() => chooseSun(row.k)}>
+								<td class="city-name">
+									{row.name}
+									<span class="muted">{row.country}</span>
+								</td>
+								<td class="num">{row.k + 1}</td>
+								{#each row.months as v}
+									<td
+										class="num cell"
+										style="background: {colorForSunshine(v ?? 0)}; color: {(v ?? 0) > 7
+											? '#1a1a1a'
+											: '#f5f5f5'};"
+									>
+										{v == null ? '–' : v.toFixed(1)}
+									</td>
+								{/each}
+								<td class="num avg">{row.annual.toFixed(1)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="footnote">
+				Average hours of bright sunshine per day, by calendar month, {sunMeta?.period ??
+					'2019–2023 average'}. Showing the {Math.min(sunN, SUN_TABLE_MAX)} most populous of {nf.format(
+					sunN
+				)} cities; all are plotted on the map. Data:
+				<a href={sunMeta?.url} target="_blank" rel="noopener"
+					>Open-Meteo Historical Weather API</a
+				>
+				(ERA5 reanalysis); city rankings from GeoNames. Sunshine duration is the time the sun is not
+				obscured by cloud, so it is always less than the astronomical daylight length.
+			</p>
+		</div>
+	{:else}
 	<!-- Featured cities table -->
 	<div class="table-card card">
 		<h2>Featured cities — daylight hours by month</h2>
@@ -509,6 +851,7 @@
 			OpenStreetMap contributors.
 		</p>
 	</div>
+	{/if}
 </div>
 
 <style>
@@ -539,6 +882,59 @@
 		padding: 18px;
 		margin-top: 20px;
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+	}
+
+	/* Mode toggle */
+	.mode-toggle {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.seg {
+		display: flex;
+		background: #0e1626;
+		border: 1px solid #1f2940;
+		border-radius: 10px;
+		padding: 4px;
+		gap: 4px;
+		align-self: flex-start;
+		max-width: 100%;
+		flex-wrap: wrap;
+	}
+	.seg-btn {
+		flex: 1;
+		white-space: nowrap;
+		border: none;
+		background: transparent;
+		color: #aab4c5;
+		font-size: 0.92rem;
+		font-weight: 600;
+		padding: 8px 16px;
+		border-radius: 7px;
+		cursor: pointer;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
+	}
+	.seg-btn:hover:not(:disabled) {
+		color: #e5e9f0;
+	}
+	.seg-btn.on {
+		background: #fcd34d;
+		color: #1a1a1a;
+	}
+	.seg-btn:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+	.mode-desc {
+		margin: 0;
+		font-size: 0.85rem;
+		color: #aab4c5;
+		line-height: 1.45;
+	}
+	.mode-desc a {
+		color: #fcd34d;
 	}
 
 	/* Controls */

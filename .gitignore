@@ -9,3 +9,7 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Sunmap pipeline: ignore the large raw GeoNames download (re-fetchable);
+# keep the ranked city list and fetch progress cache for resumability.
+scripts/.cache/all-the-cities.json
