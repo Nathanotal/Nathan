@@ -147,6 +147,55 @@ function rgb(c: [number, number, number]): string {
 	return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 }
 
+/** Calendar month (0 = Jan .. 11 = Dec) for a day-of-year N (1..365). */
+export function monthIndex(N: number): number {
+	const monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+	let day = N;
+	let m = 0;
+	while (m < 11 && day > monthDays[m]) {
+		day -= monthDays[m];
+		m++;
+	}
+	return m;
+}
+
+/** Upper end of the real-sunshine colour scale, in hours of sun per day. */
+export const SUNSHINE_MAX = 13;
+
+/**
+ * Colour for a number of *real recorded* sunshine hours per day, going from a
+ * dim cloudy slate-blue through to a bright sunny gold. Distinct from
+ * colorForHours so the two map modes read differently at a glance.
+ */
+export function colorForSunshine(hours: number): string {
+	const stops: { h: number; c: [number, number, number] }[] = [
+		{ h: 0, c: [40, 52, 80] }, // very little sun – dim slate-blue
+		{ h: 3, c: [47, 84, 150] }, // blue
+		{ h: 5, c: [72, 132, 170] }, // teal-blue
+		{ h: 7, c: [180, 172, 120] }, // transition
+		{ h: 9, c: [245, 190, 60] }, // gold
+		{ h: 11, c: [250, 210, 80] }, // bright gold
+		{ h: SUNSHINE_MAX, c: [255, 240, 150] } // sunniest
+	];
+
+	if (!Number.isFinite(hours) || hours <= stops[0].h) return rgb(stops[0].c);
+	if (hours >= stops[stops.length - 1].h) return rgb(stops[stops.length - 1].c);
+
+	for (let i = 0; i < stops.length - 1; i++) {
+		const a = stops[i];
+		const b = stops[i + 1];
+		if (hours >= a.h && hours <= b.h) {
+			const t = (hours - a.h) / (b.h - a.h);
+			return rgb([
+				Math.round(a.c[0] + (b.c[0] - a.c[0]) * t),
+				Math.round(a.c[1] + (b.c[1] - a.c[1]) * t),
+				Math.round(a.c[2] + (b.c[2] - a.c[2]) * t)
+			]);
+		}
+	}
+	return rgb(stops[0].c);
+}
+
 // A diverse set of cities spanning every continent and a wide range of
 // latitudes, including extreme ones to show midnight sun and polar night.
 export const CITIES: City[] = [
