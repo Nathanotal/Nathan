@@ -8,13 +8,14 @@
 		annualAverage,
 		colorForHours,
 		dateLabel,
-		solarDeclination,
-		type City
+		solarDeclination
 	} from './sun';
+
+	type Place = { name: string; country?: string; lat: number; lon: number };
 
 	// --- State -------------------------------------------------------------
 	let selectedDay = 172; // ~21 June, northern summer solstice
-	let selected: City | null = CITIES.find((c) => c.name === 'Stockholm') ?? null;
+	let selected: Place | null = CITIES.find((c) => c.name === 'Stockholm') ?? null;
 	let sortKey: 'lat' | 'name' | 'annual' = 'lat';
 	let sortDir: 1 | -1 = 1;
 	let playing = false;
@@ -25,52 +26,97 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let L: any;
 	let map: any;
+	let cityLayer: any;
 	let subsolarLine: any;
+	let infoPopup: any;
 	let mapReady = false;
-	const markers = new Map<City, any>();
+
+	// --- Big city dataset (169k points) -----------------------------------
+	let bigLat = new Float32Array(0); // latitude per city
+	let bigLon = new Float32Array(0); // longitude per city
+	let bigNames: string[] = [];
+	let order = new Int32Array(0); // city indices sorted by latitude (ascending)
+	let sortedLat = new Float32Array(0); // bigLat[order[k]], for binary search
+	let nCities = 0;
+	let dataReady = false;
+	let loading = true;
+	let loadError = '';
+
+	// Daylight colour depends only on latitude + day, so precompute a colour for
+	// each 0.25° latitude band once per day and reuse it for every city.
+	const BUCKETS = 721; // -90 .. 90 in 0.25° steps
+	let colorTable: string[] = [];
+	const bucketOf = (la: number) => {
+		const i = Math.round((la + 90) / 0.25);
+		return i < 0 ? 0 : i > 720 ? 720 : i;
+	};
+	function rebuildColorTable(day: number) {
+		const t = new Array(BUCKETS);
+		for (let i = 0; i < BUCKETS; i++) t[i] = colorForHours(daylightHours(-90 + i * 0.25, day));
+		colorTable = t;
+	}
 
 	$: declDeg = (solarDeclination(selectedDay) * 180) / Math.PI;
 
-	function markerStyle(c: City, h: number) {
-		const isSel = selected === c;
-		return {
-			radius: isSel ? 9 : 6,
-			fillColor: colorForHours(h),
-			color: isSel ? '#ffffff' : '#06101f',
-			weight: isSel ? 2.5 : 1,
-			opacity: 1,
-			fillOpacity: 1
-		};
+	// First index k where sortedLat[k] >= target (binary search).
+	function lowerBound(target: number) {
+		let lo = 0,
+			hi = nCities;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (sortedLat[mid] < target) lo = mid + 1;
+			else hi = mid;
+		}
+		return lo;
 	}
 
-	function popupHtml(c: City, h: number): string {
+	function fmt(h: number): string {
+		if (h <= 0) return '0h';
+		if (h >= 24) return '24h';
+		const m = Math.round(h * 60);
+		return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+	}
+
+	function infoHtml(p: Place): string {
+		const h = daylightHours(p.lat, selectedDay);
 		return (
-			`<div style="text-align:center">` +
-			`<strong>${c.name}</strong><br>` +
-			`<span style="color:#64748b">${c.country}</span><br>` +
-			`<span style="font-size:1.15rem;font-weight:700;color:#b45309">${fmt(h)}</span><br>` +
-			`<span style="color:#64748b">of daylight on ${dateLabel(selectedDay)}</span>` +
+			`<div style="text-align:center;min-width:120px">` +
+			`<strong>${p.name}</strong>` +
+			(p.country ? `<br><span style="color:#64748b">${p.country}</span>` : '') +
+			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${fmt(h)}</span>` +
+			`<br><span style="color:#64748b">of daylight on ${dateLabel(selectedDay)}</span>` +
 			`</div>`
 		);
 	}
 
-	// Repaint every marker + the subsolar line for the current day / selection.
-	function refresh() {
-		if (!mapReady) return;
-		for (const [c, m] of markers) {
-			const h = daylightHours(c.lat, selectedDay);
-			m.setStyle(markerStyle(c, h));
-			m.setRadius(selected === c ? 9 : 6);
-			m.setTooltipContent(`${c.name} — ${fmt(h)}`);
-			m.setPopupContent(popupHtml(c, h));
-			if (selected === c) m.bringToFront();
+	function choose(p: Place, openPopup = true) {
+		selected = p;
+		if (mapReady && openPopup && infoPopup) {
+			map.panTo([p.lat, p.lon], { animate: true });
+			infoPopup.setLatLng([p.lat, p.lon]).setContent(infoHtml(p)).openOn(map);
 		}
+	}
+
+	// Throttle re-rendering of the canvas + subsolar line to one per frame.
+	let rafPending = false;
+	function scheduleRender() {
+		if (!dataReady || rafPending) return;
+		rafPending = true;
+		requestAnimationFrame(() => {
+			rafPending = false;
+			if (cityLayer) cityLayer.redraw();
+			updateSubsolar();
+		});
+	}
+
+	function updateSubsolar() {
+		if (!map) return;
 		const pts = [
-			[declDeg, -200],
-			[declDeg, 200]
+			[declDeg, -400],
+			[declDeg, 400]
 		];
 		if (subsolarLine) subsolarLine.setLatLngs(pts);
-		else if (map)
+		else
 			subsolarLine = L.polyline(pts, {
 				color: '#fcd34d',
 				weight: 2,
@@ -80,12 +126,14 @@
 			}).addTo(map);
 	}
 
-	// Re-run whenever the day or the selected city changes (once the map exists).
+	// Recolour + repaint whenever the day or selection changes.
 	$: {
 		selectedDay;
 		selected;
-		mapReady;
-		refresh();
+		if (mapReady && dataReady) {
+			rebuildColorTable(selectedDay);
+			scheduleRender();
+		}
 	}
 
 	onMount(async () => {
@@ -96,35 +144,164 @@
 			center: [25, 5],
 			zoom: 2,
 			minZoom: 2,
+			maxZoom: 12,
 			worldCopyJump: true,
-			scrollWheelZoom: true
+			preferCanvas: true
 		});
-
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-			maxZoom: 18,
+			maxZoom: 19,
 			attribution: '&copy; OpenStreetMap contributors'
 		}).addTo(map);
 
-		for (const c of CITIES) {
-			const h = daylightHours(c.lat, selectedDay);
-			const m = L.circleMarker([c.lat, c.lon], markerStyle(c, h));
-			m.bindTooltip(`${c.name} — ${fmt(h)}`, { direction: 'top' });
-			m.bindPopup(popupHtml(c, h));
-			m.on('click', () => (selected = c));
-			m.addTo(map);
-			markers.set(c, m);
-		}
-
+		infoPopup = L.popup({ autoPan: false });
 		mapReady = true;
-		refresh();
+		updateSubsolar();
+
+		// Load the big city dataset and build lookup structures.
+		try {
+			const res = await fetch('/cities.json');
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data: { names: string; lat: number[]; lon: number[] } = await res.json();
+			bigNames = data.names.split('\n');
+			bigLat = Float32Array.from(data.lat);
+			bigLon = Float32Array.from(data.lon);
+			nCities = bigNames.length;
+
+			// Sort city indices by latitude so the renderer can (a) skip to the
+			// visible band with a binary search and (b) keep one fill colour per band.
+			order = Int32Array.from({ length: nCities }, (_, i) => i).sort(
+				(a, b) => bigLat[a] - bigLat[b]
+			);
+			sortedLat = new Float32Array(nCities);
+			for (let k = 0; k < nCities; k++) sortedLat[k] = bigLat[order[k]];
+
+			rebuildColorTable(selectedDay);
+			dataReady = true;
+			loading = false;
+
+			cityLayer = makeCityLayer();
+			cityLayer.addTo(map);
+			map.on('click', onMapClick);
+		} catch (e) {
+			loading = false;
+			loadError = e instanceof Error ? e.message : 'failed to load cities';
+		}
 	});
+
+	// Custom Leaflet layer that draws all visible cities onto a single canvas.
+	function makeCityLayer() {
+		const Layer = L.Layer.extend({
+			onAdd(m: any) {
+				this._map = m;
+				const c = (this._canvas = L.DomUtil.create('canvas', 'leaflet-zoom-hide'));
+				c.style.pointerEvents = 'none';
+				this._ctx = c.getContext('2d');
+				m.getPanes().overlayPane.appendChild(c);
+				m.on('moveend zoomend viewreset resize', this._render, this);
+				this._render();
+				return this;
+			},
+			onRemove(m: any) {
+				L.DomUtil.remove(this._canvas);
+				m.off('moveend zoomend viewreset resize', this._render, this);
+				return this;
+			},
+			redraw() {
+				if (this._map) this._render();
+				return this;
+			},
+			_render() {
+				const m = this._map;
+				const size = m.getSize();
+				const c = this._canvas;
+				L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+				c.width = size.x;
+				c.height = size.y;
+				const ctx = this._ctx;
+				ctx.clearRect(0, 0, size.x, size.y);
+
+				const b = m.getBounds();
+				const south = b.getSouth();
+				const north = b.getNorth();
+				const west = b.getWest();
+				const east = b.getEast();
+				const zoom = m.getZoom();
+				const r = zoom < 4 ? 0.8 : zoom < 6 ? 1.4 : 2.2;
+				const d = r * 2;
+
+				let lastBucket = -1;
+				for (let k = lowerBound(south); k < nCities; k++) {
+					const la = sortedLat[k];
+					if (la > north) break;
+					const i = order[k];
+					const lo = bigLon[i];
+					const bk = bucketOf(la);
+					if (bk !== lastBucket) {
+						ctx.fillStyle = colorTable[bk];
+						lastBucket = bk;
+					}
+					// Draw the city plus its ±360° world-wrap copies that fall in view.
+					for (let w = -360; w <= 360; w += 360) {
+						const lon = lo + w;
+						if (lon < west || lon > east) continue;
+						const p = m.latLngToContainerPoint([la, lon]);
+						ctx.fillRect((p.x - r) | 0, (p.y - r) | 0, d < 1 ? 1 : d, d < 1 ? 1 : d);
+					}
+				}
+
+				// Highlight the selected city with a white ring on top.
+				if (selected) {
+					const p = m.latLngToContainerPoint([selected.lat, selected.lon]);
+					ctx.beginPath();
+					ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+					ctx.lineWidth = 2;
+					ctx.strokeStyle = '#ffffff';
+					ctx.stroke();
+				}
+			}
+		});
+		return new Layer();
+	}
+
+	// Click hit-testing: find the nearest city to the click within ~14px.
+	function onMapClick(e: any) {
+		if (!dataReady) return;
+		const m = map;
+		const b = m.getBounds();
+		const south = b.getSouth();
+		const north = b.getNorth();
+		const west = b.getWest();
+		const east = b.getEast();
+		const cp = e.containerPoint;
+		let best = -1;
+		let bestD = 14 * 14;
+		for (let k = lowerBound(south); k < nCities; k++) {
+			const la = sortedLat[k];
+			if (la > north) break;
+			const i = order[k];
+			const lo = bigLon[i];
+			for (let w = -360; w <= 360; w += 360) {
+				const lon = lo + w;
+				if (lon < west || lon > east) continue;
+				const p = m.latLngToContainerPoint([la, lon]);
+				const dx = p.x - cp.x;
+				const dy = p.y - cp.y;
+				const dist = dx * dx + dy * dy;
+				if (dist < bestD) {
+					bestD = dist;
+					best = i;
+				}
+			}
+		}
+		if (best >= 0) choose({ name: bigNames[best], lat: bigLat[best], lon: bigLon[best] });
+	}
 
 	onDestroy(() => {
 		if (timer) clearInterval(timer);
 		if (map) map.remove();
 	});
 
-	// --- Table -------------------------------------------------------------
+	// --- Featured-cities table --------------------------------------------
 	const table = CITIES.map((c) => ({
 		city: c,
 		months: MONTHS.map((m) => daylightHours(c.lat, m.day)),
@@ -147,15 +324,6 @@
 		}
 	}
 
-	function selectCity(c: City) {
-		selected = c;
-		if (mapReady) {
-			const m = markers.get(c);
-			map.panTo([c.lat, c.lon], { animate: true });
-			m?.openPopup();
-		}
-	}
-
 	function togglePlay() {
 		playing = !playing;
 		if (playing) {
@@ -168,13 +336,6 @@
 		}
 	}
 
-	function fmt(h: number): string {
-		if (h <= 0) return '0h';
-		if (h >= 24) return '24h';
-		const m = Math.round(h * 60);
-		return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-	}
-
 	const monthMarks = [
 		{ d: 1, l: 'Jan' },
 		{ d: 60, l: 'Mar' },
@@ -185,6 +346,7 @@
 	];
 
 	const legendStops = [0, 3, 6, 9, 12, 15, 18, 21, 24];
+	const nf = new Intl.NumberFormat('en-US');
 </script>
 
 <svelte:head>
@@ -195,9 +357,11 @@
 	<header class="intro">
 		<h1>☀️ World Sunlight Map</h1>
 		<p>
-			How many hours of daylight does each city get through the year? Pan and zoom the map, drag the
-			date slider across the seasons, and <strong>click any city</strong> to see its exact day length.
-			Brighter dots = more sun; the gold dashed line shows where the sun is directly overhead.
+			How many hours of daylight does every city on Earth get through the year?
+			{#if dataReady}<strong>{nf.format(nCities)} cities</strong> are plotted —{:else}Cities are
+				plotted —{/if} pan and zoom the map, drag the date slider across the seasons, and
+			<strong>click anywhere near a city</strong> to read its exact day length. Brighter dots = more
+			sun; the gold dashed line shows where the sun is directly overhead.
 		</p>
 	</header>
 
@@ -225,7 +389,14 @@
 
 	<!-- Map -->
 	<div class="map-card card">
-		<div class="map" bind:this={mapEl} />
+		<div class="map-holder">
+			<div class="map" bind:this={mapEl} />
+			{#if loading}
+				<div class="map-overlay">Loading {nf.format(169137)} cities…</div>
+			{:else if loadError}
+				<div class="map-overlay err">Couldn't load cities ({loadError})</div>
+			{/if}
+		</div>
 		<div class="legend">
 			<span class="legend-label">Daylight:</span>
 			<div class="legend-scale">
@@ -253,7 +424,7 @@
 		{@const todays = daylightHours(selected.lat, selectedDay)}
 		<div class="detail card">
 			<div class="detail-head">
-				<h2>{selected.name}, {selected.country}</h2>
+				<h2>{selected.name}{selected.country ? `, ${selected.country}` : ''}</h2>
 				<span class="coords">
 					{Math.abs(selected.lat).toFixed(2)}°{selected.lat >= 0 ? 'N' : 'S'},
 					{Math.abs(selected.lon).toFixed(2)}°{selected.lon >= 0 ? 'E' : 'W'}
@@ -287,9 +458,9 @@
 		</div>
 	{/if}
 
-	<!-- Full table -->
+	<!-- Featured cities table -->
 	<div class="table-card card">
-		<h2>Daylight hours by city and month</h2>
+		<h2>Featured cities — daylight hours by month</h2>
 		<div class="table-scroll">
 			<table>
 				<thead>
@@ -310,7 +481,7 @@
 				</thead>
 				<tbody>
 					{#each sortedTable as row}
-						<tr class:active={selected === row.city} on:click={() => selectCity(row.city)}>
+						<tr class:active={selected === row.city} on:click={() => choose(row.city)}>
 							<td class="city-name">
 								{row.city.name}
 								<span class="muted">{row.city.country}</span>
@@ -333,8 +504,9 @@
 		<p class="footnote">
 			Values are hours between sunrise and sunset, computed from each city's latitude using the
 			solar-declination and sunrise equations (including a −0.833° correction for atmospheric
-			refraction and the sun's radius). Months are sampled on the 15th. Daylight Saving Time is not
-			applied. Map tiles © OpenStreetMap contributors.
+			refraction and the sun's radius). The featured table samples the 15th of each month; Daylight
+			Saving Time is not applied. City coordinates from the GeoNames dataset; map tiles ©
+			OpenStreetMap contributors.
 		</p>
 	</div>
 </div>
@@ -430,15 +602,32 @@
 	}
 
 	/* Map */
+	.map-holder {
+		position: relative;
+	}
 	.map {
 		width: 100%;
-		height: clamp(340px, 58vh, 560px);
+		height: clamp(360px, 62vh, 600px);
 		border-radius: 10px;
 		border: 1px solid #223;
 		background: #0a1426;
 		z-index: 0;
 	}
-	/* Leaflet popups read better on the dark theme */
+	.map-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(10, 20, 38, 0.7);
+		color: #e5e9f0;
+		font-weight: 600;
+		border-radius: 10px;
+		pointer-events: none;
+	}
+	.map-overlay.err {
+		color: #fca5a5;
+	}
 	:global(.leaflet-popup-content) {
 		margin: 10px 14px;
 		font-family: system-ui, sans-serif;
