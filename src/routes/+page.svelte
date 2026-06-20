@@ -1,24 +1,32 @@
 <script>
 	import { onMount } from 'svelte';
-	onMount(() => {
-	});
+	onMount(() => {});
 </script>
 
 <head>
 	<title>Neuromorphic visualization</title>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+	<link
+		rel="stylesheet"
+		href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+	/>
 </head>
 
 <div class="icon-container">
 	<div class="icon-item">
 		<a href="/neurons">
-			<i class="fas fa-brain fa-3x navigation_icon"></i>
+			<i class="fas fa-brain fa-3x navigation_icon" />
 			<p>SSNN simulator</p>
 		</a>
 	</div>
 	<div class="icon-item">
+		<a href="/sunmap">
+			<i class="fas fa-sun navigation_icon" />
+			<p>Sunlight Map</p>
+		</a>
+	</div>
+	<div class="icon-item">
 		<a href="/about">
-			<i class="fa-solid fa-address-card navigation_icon"></i>
+			<i class="fa-solid fa-address-card navigation_icon" />
 			<p>About me</p>
 		</a>
 	</div>
@@ -49,5 +57,3 @@
 		font-size: 100px;
 	}
 </style>
-
-
