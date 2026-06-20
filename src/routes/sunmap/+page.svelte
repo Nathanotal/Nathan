@@ -593,12 +593,12 @@
 				<strong>Maximum possible daylight</strong> — hours between sunrise and sunset from astronomy
 				alone (clear-sky, latitude + date). Every one of {nf.format(nCities || 169137)} cities is plotted.
 			{:else}
-				<strong>Real recorded sunshine</strong> — actual average hours of bright sunshine per day, from
-				the
-				<a href={sunMeta?.url ?? 'https://open-meteo.com/en/docs/historical-weather-api'}
-					target="_blank"
-					rel="noopener">Open-Meteo Historical Weather API (ERA5 reanalysis)</a
-				>, {sunMeta?.period ?? '2019–2023 average'}. {nf.format(sunN)} largest cities.
+				<strong>Real recorded sunshine</strong> — average hours of bright sunshine actually measured
+				per day, from
+				<a href={sunMeta?.url} target="_blank" rel="noopener"
+					>{sunMeta?.source ?? 'recorded climate normals'}</a
+				>{sunMeta?.period ? ` (${sunMeta.period})` : ''}. {nf.format(sunN)} cities with published
+				records.
 			{/if}
 		</p>
 	</div>
@@ -698,9 +698,8 @@
 			</div>
 			<p class="footnote">
 				Real recorded sunshine for {sunNames[k]} — average bright-sunshine hours per day for each
-				calendar month, {sunMeta?.period ?? '2019–2023'}. Source:
-				<a href={sunMeta?.url} target="_blank" rel="noopener">Open-Meteo Historical Weather API</a> (ERA5
-				reanalysis).
+				calendar month ({sunMeta?.period ?? 'climate normals'}). Source:
+				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>.
 			</p>
 		</div>
 	{:else if selected}
@@ -744,7 +743,7 @@
 	<!-- Real recorded sunshine table -->
 	{#if mode === 'real' && sunReady}
 		<div class="table-card card">
-			<h2>Most populous cities — recorded sunshine hours per day by month</h2>
+			<h2>Sunniest cities — recorded sunshine hours per day by month</h2>
 			<div class="table-scroll">
 				<table>
 					<thead>
@@ -753,7 +752,7 @@
 								City {sunSortKey === 'name' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
 							</th>
 							<th class="sortable num" on:click={() => setSunSort('pop')}>
-								Rank {sunSortKey === 'pop' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
+								# {sunSortKey === 'pop' ? (sunSortDir === 1 ? '▲' : '▼') : ''}
 							</th>
 							{#each MONTHS as m}
 								<th class="num">{m.short}</th>
@@ -788,15 +787,14 @@
 				</table>
 			</div>
 			<p class="footnote">
-				Average hours of bright sunshine per day, by calendar month, {sunMeta?.period ??
-					'2019–2023 average'}. Showing the {Math.min(sunN, SUN_TABLE_MAX)} most populous of {nf.format(
+				Average hours of bright sunshine per day, by calendar month ({sunMeta?.period ??
+					'climate normals'}). Showing the sunniest {Math.min(sunN, SUN_TABLE_MAX)} of {nf.format(
 					sunN
 				)} cities; all are plotted on the map. Data:
-				<a href={sunMeta?.url} target="_blank" rel="noopener"
-					>Open-Meteo Historical Weather API</a
-				>
-				(ERA5 reanalysis); city rankings from GeoNames. Sunshine duration is the time the sun is not
-				obscured by cloud, so it is always less than the astronomical daylight length.
+				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>,
+				compiled from national meteorological-service climate normals; coordinates via GeoNames /
+				Open-Meteo. Sunshine duration is the time the sun is not obscured by cloud, so it is always
+				less than the astronomical daylight length.
 			</p>
 		</div>
 	{:else}
