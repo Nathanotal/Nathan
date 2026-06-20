@@ -49,18 +49,26 @@
 	let loading = true;
 	let loadError = '';
 
-	// --- Real recorded sunshine dataset (Open-Meteo / ERA5) ----------------
-	type SunMeta = { source: string; url: string; period: string; note: string };
+	// --- Real sunshine dataset: recorded (Wikipedia) + estimated (NASA POWER) --
+	type SunMeta = { source: string; url: string; note?: string };
 	let sunReady = false;
 	let sunN = 0;
+	let sunNRecorded = 0;
 	let sunNames: string[] = [];
 	let sunCountry: string[] = [];
 	let sunLat = new Float32Array(0);
 	let sunLon = new Float32Array(0);
 	let sunVals: number[][] = []; // [city][month] mean daily sunshine hours
 	let sunRad: number[][] = []; // [city][month] mean daily shortwave radiation MJ/m²
-	let sunMeta: SunMeta | null = null;
+	let sunEstFlag = new Uint8Array(0); // 1 = estimated, 0 = recorded
+	let metaRec: SunMeta | null = null; // recorded-data source
+	let metaEst: SunMeta | null = null; // estimated-data source
+	let showEstimated = true; // include the POWER-estimated cities on the map
 	let selectedSunIdx: number | null = null; // index into the sunshine dataset
+
+	const isEst = (k: number) => sunEstFlag[k] === 1;
+	const srcMeta = (k: number) => (isEst(k) ? metaEst : metaRec);
+	const kindLabel = (k: number) => (isEst(k) ? 'Estimated · NASA POWER' : 'Recorded · Wikipedia');
 
 	$: curMonth = monthIndex(selectedDay);
 
@@ -119,12 +127,14 @@
 
 	function sunInfoHtml(k: number): string {
 		const v = sunVals[k][curMonth];
+		const tag = isEst(k) ? '#475569' : '#b45309';
 		return (
 			`<div style="text-align:center;min-width:140px">` +
 			`<strong>${sunNames[k]}</strong>` +
 			`<br><span style="color:#64748b">${sunCountry[k]}</span>` +
 			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${sunFmt(v)}</span>` +
 			`<br><span style="color:#64748b">avg sunshine/day in ${MONTHS[curMonth].name}</span>` +
+			`<br><span style="font-size:0.72rem;color:${tag}">${isEst(k) ? '≈ estimated (NASA POWER)' : '✓ recorded (Wikipedia)'}</span>` +
 			`</div>`
 		);
 	}
@@ -199,6 +209,7 @@
 		selected;
 		mode;
 		curMonth;
+		showEstimated;
 		if (mapReady && dataReady) {
 			rebuildColorTable(selectedDay);
 			scheduleRender();
@@ -262,13 +273,16 @@
 			if (res.ok) {
 				const s = await res.json();
 				sunN = s.n;
+				sunNRecorded = s.nRecorded ?? s.n;
 				sunNames = s.names.split('\n');
 				sunCountry = s.country.split('\n');
 				sunLat = Float32Array.from(s.lat);
 				sunLon = Float32Array.from(s.lon);
 				sunVals = s.sun;
 				sunRad = s.rad;
-				sunMeta = s.meta;
+				sunEstFlag = Uint8Array.from(s.est ?? new Array(s.n).fill(0));
+				metaRec = s.meta?.recorded ?? s.meta ?? null;
+				metaEst = s.meta?.estimated ?? null;
 				sunReady = sunN > 0;
 			}
 		} catch {
@@ -324,7 +338,11 @@
 						const la = sunLat[k];
 						if (la < south || la > north) continue;
 						const lo0 = sunLon[k];
-						ctx.fillStyle = colorForSunshine(sunVals[k][month]);
+						if (sunEstFlag[k] && !showEstimated) continue;
+						const v = sunVals[k][month];
+						if (v == null) continue;
+						ctx.fillStyle = colorForSunshine(v);
+						const recorded = sunEstFlag[k] === 0;
 						for (let w = -360; w <= 360; w += 360) {
 							const lon = lo0 + w;
 							if (lon < west || lon > east) continue;
@@ -332,6 +350,11 @@
 							ctx.beginPath();
 							ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
 							ctx.fill();
+								if (recorded) {
+									ctx.lineWidth = 1;
+									ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+									ctx.stroke();
+								}
 						}
 					}
 					if (selectedSunIdx != null) {
@@ -400,6 +423,7 @@
 			let bestK = -1;
 			let bestDist = 16 * 16;
 			for (let k = 0; k < sunN; k++) {
+				if (sunEstFlag[k] && !showEstimated) continue;
 				const la = sunLat[k];
 				if (la < rb.getSouth() || la > rb.getNorth()) continue;
 				const lo0 = sunLon[k];
@@ -474,15 +498,22 @@
 	let sunSortKey: 'pop' | 'name' | 'annual' = 'pop';
 	let sunSortDir: 1 | -1 = 1;
 
-	$: sunTable = sunReady
-		? Array.from({ length: Math.min(sunN, SUN_TABLE_MAX) }, (_, k) => ({
+	$: sunTable = (() => {
+		if (!sunReady) return [];
+		const rows = [];
+		for (let k = 0; k < sunN && rows.length < SUN_TABLE_MAX; k++) {
+			if (sunEstFlag[k] && !showEstimated) continue;
+			rows.push({
 				k,
 				name: sunNames[k],
 				country: sunCountry[k],
 				months: sunVals[k],
-				annual: sunAnnual(k)
-			}))
-		: [];
+				annual: sunAnnual(k),
+				est: sunEstFlag[k] === 1
+			});
+		}
+		return rows;
+	})();
 
 	$: sunSortedTable = [...sunTable].sort((a, b) => {
 		let d = 0;
@@ -593,14 +624,24 @@
 				<strong>Maximum possible daylight</strong> — hours between sunrise and sunset from astronomy
 				alone (clear-sky, latitude + date). Every one of {nf.format(nCities || 169137)} cities is plotted.
 			{:else}
-				<strong>Real recorded sunshine</strong> — average hours of bright sunshine actually measured
-				per day, from
-				<a href={sunMeta?.url} target="_blank" rel="noopener"
-					>{sunMeta?.source ?? 'recorded climate normals'}</a
-				>{sunMeta?.period ? ` (${sunMeta.period})` : ''}. {nf.format(sunN)} cities with published
-				records.
+				<strong>Real sunshine</strong> — average hours of bright sunshine per day.
+				<span class="chip rec">●</span>
+				<strong>{nf.format(sunNRecorded)} recorded</strong> from
+				<a href={metaRec?.url} target="_blank" rel="noopener">{metaRec?.source ?? 'Wikipedia'}</a>
+				(station climate normals);
+				<span class="chip est">●</span>
+				<strong>{nf.format(sunN - sunNRecorded)} estimated</strong> from
+				<a href={metaEst?.url} target="_blank" rel="noopener">NASA POWER</a> satellite data via a model
+				calibrated on the recorded cities (cross-validated ±0.6 h/day). Recorded cities are ringed in
+				white.
 			{/if}
 		</p>
+		{#if mode === 'real' && sunReady}
+			<label class="est-toggle">
+				<input type="checkbox" bind:checked={showEstimated} />
+				Show estimated cities ({nf.format(sunN - sunNRecorded)})
+			</label>
+		{/if}
 	</div>
 
 	<!-- Map -->
@@ -657,7 +698,10 @@
 		{@const k = selectedSunIdx}
 		<div class="detail card">
 			<div class="detail-head">
-				<h2>{sunNames[k]}, {sunCountry[k]}</h2>
+				<h2>
+					{sunNames[k]}, {sunCountry[k]}
+					<span class="badge {isEst(k) ? 'est' : 'rec'}">{kindLabel(k)}</span>
+				</h2>
 				<span class="coords">
 					{Math.abs(sunLat[k]).toFixed(2)}°{sunLat[k] >= 0 ? 'N' : 'S'},
 					{Math.abs(sunLon[k]).toFixed(2)}°{sunLon[k] >= 0 ? 'E' : 'W'}
@@ -698,8 +742,8 @@
 			</div>
 			<p class="footnote">
 				Real recorded sunshine for {sunNames[k]} — average bright-sunshine hours per day for each
-				calendar month ({sunMeta?.period ?? 'climate normals'}). Source:
-				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>{#if sunRad[k][curMonth] != null}; solar radiation from
+				calendar month . {#if isEst(k)}This value is <strong>estimated</strong> from NASA POWER satellite data (not directly measured). {/if}Source:
+				<a href={srcMeta(k)?.url} target="_blank" rel="noopener">{srcMeta(k)?.source ?? 'Wikipedia'}</a>{#if sunRad[k][curMonth] != null}; solar radiation from
 					<a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a> (1991–2020){/if}.
 			</p>
 		</div>
@@ -744,7 +788,7 @@
 	<!-- Real recorded sunshine table -->
 	{#if mode === 'real' && sunReady}
 		<div class="table-card card">
-			<h2>Sunniest cities — recorded sunshine hours per day by month</h2>
+			<h2>Sunniest cities — sunshine hours per day by month</h2>
 			<div class="table-scroll">
 				<table>
 					<thead>
@@ -767,6 +811,7 @@
 						{#each sunSortedTable as row}
 							<tr class:active={selectedSunIdx === row.k} on:click={() => chooseSun(row.k)}>
 								<td class="city-name">
+									<span class="dot {row.est ? 'est' : 'rec'}" title={row.est ? 'Estimated (NASA POWER)' : 'Recorded (Wikipedia)'}>●</span>
 									{row.name}
 									<span class="muted">{row.country}</span>
 								</td>
@@ -788,14 +833,17 @@
 				</table>
 			</div>
 			<p class="footnote">
-				Average hours of bright sunshine per day, by calendar month ({sunMeta?.period ??
-					'climate normals'}). Showing the sunniest {Math.min(sunN, SUN_TABLE_MAX)} of {nf.format(
-					sunN
-				)} cities; all are plotted on the map. Data:
-				<a href={sunMeta?.url} target="_blank" rel="noopener">{sunMeta?.source ?? 'Wikipedia'}</a>,
-				compiled from national meteorological-service climate normals; coordinates via GeoNames /
-				Open-Meteo. Sunshine duration is the time the sun is not obscured by cloud, so it is always
-				less than the astronomical daylight length.
+				Average hours of bright sunshine per day, by calendar month. Showing the sunniest {sunTable.length}
+				of {nf.format(sunN)} cities ({nf.format(sunNRecorded)} recorded, {nf.format(
+					sunN - sunNRecorded
+				)} estimated); all are plotted on the map.
+				<span class="dot rec">●</span> recorded —
+				<a href={metaRec?.url} target="_blank" rel="noopener">{metaRec?.source ?? 'Wikipedia'}</a>
+				station normals.
+				<span class="dot est">●</span> estimated —
+				<a href={metaEst?.url} target="_blank" rel="noopener">NASA POWER</a> satellite data via a model
+				calibrated on the recorded cities (cross-validated ±0.6 h/day). Sunshine duration is always less
+				than the astronomical daylight length.
 			</p>
 		</div>
 	{:else}
@@ -934,6 +982,54 @@
 	}
 	.mode-desc a {
 		color: #fcd34d;
+	}
+	.chip,
+	.dot {
+		font-size: 0.7rem;
+		vertical-align: middle;
+	}
+	.dot {
+		margin-right: 3px;
+	}
+	.chip.rec,
+	.dot.rec {
+		color: #fcd34d;
+	}
+	.chip.est,
+	.dot.est {
+		color: #7c8aa5;
+	}
+	.est-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		margin-top: 4px;
+		font-size: 0.82rem;
+		color: #aab4c5;
+		cursor: pointer;
+		user-select: none;
+	}
+	.est-toggle input {
+		accent-color: #fcd34d;
+		cursor: pointer;
+	}
+	.badge {
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		padding: 2px 7px;
+		border-radius: 999px;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+	.badge.rec {
+		background: rgba(252, 211, 77, 0.18);
+		color: #fcd34d;
+	}
+	.badge.est {
+		background: rgba(124, 138, 165, 0.22);
+		color: #aab4c5;
 	}
 
 	/* Controls */
