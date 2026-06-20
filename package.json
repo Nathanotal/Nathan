@@ -12,6 +12,9 @@
 		"format": "prettier --plugin-search-dir . --write .",
 		"host": "npm run dev -- --host --port 3333"
 	},
+	"engines": {
+		"node": "22.x"
+	},
 	"devDependencies": {
 		"@dimforge/rapier3d-compat": "^0.11.2",
 		"@sveltejs/adapter-static": "^2.0.3",
