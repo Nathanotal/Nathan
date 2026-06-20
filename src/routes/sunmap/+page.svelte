@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import 'leaflet/dist/leaflet.css';
 	import {
 		CITIES,
 		MONTHS,
@@ -13,28 +14,117 @@
 
 	// --- State -------------------------------------------------------------
 	let selectedDay = 172; // ~21 June, northern summer solstice
-	let hovered: City | null = null;
 	let selected: City | null = CITIES.find((c) => c.name === 'Stockholm') ?? null;
 	let sortKey: 'lat' | 'name' | 'annual' = 'lat';
 	let sortDir: 1 | -1 = 1;
 	let playing = false;
 	let timer: ReturnType<typeof setInterval> | null = null;
 
-	// --- Projection helpers (equirectangular, viewBox 360 x 180) -----------
-	const projX = (lon: number) => lon + 180;
-	const projY = (lat: number) => 90 - lat;
-	// As percentages, for HTML overlays on top of the map.
-	const leftPct = (lon: number) => ((lon + 180) / 360) * 100;
-	const topPct = (lat: number) => ((90 - lat) / 180) * 100;
+	// --- Leaflet map -------------------------------------------------------
+	let mapEl: HTMLDivElement;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let L: any;
+	let map: any;
+	let subsolarLine: any;
+	let mapReady = false;
+	const markers = new Map<City, any>();
 
-	const TROPIC = 23.44;
-	const POLAR = 66.56;
-
-	// --- Reactive derived data --------------------------------------------
 	$: declDeg = (solarDeclination(selectedDay) * 180) / Math.PI;
-	$: subsolarY = projY(declDeg); // latitude where the sun is overhead today
 
-	// Pre-compute the full month-by-month table once (independent of the day).
+	function markerStyle(c: City, h: number) {
+		const isSel = selected === c;
+		return {
+			radius: isSel ? 9 : 6,
+			fillColor: colorForHours(h),
+			color: isSel ? '#ffffff' : '#06101f',
+			weight: isSel ? 2.5 : 1,
+			opacity: 1,
+			fillOpacity: 1
+		};
+	}
+
+	function popupHtml(c: City, h: number): string {
+		return (
+			`<div style="text-align:center">` +
+			`<strong>${c.name}</strong><br>` +
+			`<span style="color:#64748b">${c.country}</span><br>` +
+			`<span style="font-size:1.15rem;font-weight:700;color:#b45309">${fmt(h)}</span><br>` +
+			`<span style="color:#64748b">of daylight on ${dateLabel(selectedDay)}</span>` +
+			`</div>`
+		);
+	}
+
+	// Repaint every marker + the subsolar line for the current day / selection.
+	function refresh() {
+		if (!mapReady) return;
+		for (const [c, m] of markers) {
+			const h = daylightHours(c.lat, selectedDay);
+			m.setStyle(markerStyle(c, h));
+			m.setRadius(selected === c ? 9 : 6);
+			m.setTooltipContent(`${c.name} — ${fmt(h)}`);
+			m.setPopupContent(popupHtml(c, h));
+			if (selected === c) m.bringToFront();
+		}
+		const pts = [
+			[declDeg, -200],
+			[declDeg, 200]
+		];
+		if (subsolarLine) subsolarLine.setLatLngs(pts);
+		else if (map)
+			subsolarLine = L.polyline(pts, {
+				color: '#fcd34d',
+				weight: 2,
+				dashArray: '6 6',
+				opacity: 0.9,
+				interactive: false
+			}).addTo(map);
+	}
+
+	// Re-run whenever the day or the selected city changes (once the map exists).
+	$: {
+		selectedDay;
+		selected;
+		mapReady;
+		refresh();
+	}
+
+	onMount(async () => {
+		const leaflet = await import('leaflet');
+		L = leaflet.default ?? leaflet;
+
+		map = L.map(mapEl, {
+			center: [25, 5],
+			zoom: 2,
+			minZoom: 2,
+			worldCopyJump: true,
+			scrollWheelZoom: true
+		});
+
+		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+			maxZoom: 18,
+			attribution: '&copy; OpenStreetMap contributors'
+		}).addTo(map);
+
+		for (const c of CITIES) {
+			const h = daylightHours(c.lat, selectedDay);
+			const m = L.circleMarker([c.lat, c.lon], markerStyle(c, h));
+			m.bindTooltip(`${c.name} — ${fmt(h)}`, { direction: 'top' });
+			m.bindPopup(popupHtml(c, h));
+			m.on('click', () => (selected = c));
+			m.addTo(map);
+			markers.set(c, m);
+		}
+
+		mapReady = true;
+		refresh();
+	});
+
+	onDestroy(() => {
+		if (timer) clearInterval(timer);
+		if (map) map.remove();
+	});
+
+	// --- Table -------------------------------------------------------------
 	const table = CITIES.map((c) => ({
 		city: c,
 		months: MONTHS.map((m) => daylightHours(c.lat, m.day)),
@@ -54,6 +144,15 @@
 		else {
 			sortKey = key;
 			sortDir = key === 'name' ? 1 : -1;
+		}
+	}
+
+	function selectCity(c: City) {
+		selected = c;
+		if (mapReady) {
+			const m = markers.get(c);
+			map.panTo([c.lat, c.lon], { animate: true });
+			m?.openPopup();
 		}
 	}
 
@@ -85,12 +184,7 @@
 		{ d: 305, l: 'Nov' }
 	];
 
-	// Gradient stops for the legend (0h .. 24h).
 	const legendStops = [0, 3, 6, 9, 12, 15, 18, 21, 24];
-
-	onDestroy(() => {
-		if (timer) clearInterval(timer);
-	});
 </script>
 
 <svelte:head>
@@ -101,9 +195,9 @@
 	<header class="intro">
 		<h1>☀️ World Sunlight Map</h1>
 		<p>
-			How many hours of daylight does each city get through the year? Drag the date slider to travel
-			across the seasons and watch the day length grow and shrink — and the midnight sun and polar
-			night appear near the poles.
+			How many hours of daylight does each city get through the year? Pan and zoom the map, drag the
+			date slider across the seasons, and <strong>click any city</strong> to see its exact day length.
+			Brighter dots = more sun; the gold dashed line shows where the sun is directly overhead.
 		</p>
 	</header>
 
@@ -131,109 +225,7 @@
 
 	<!-- Map -->
 	<div class="map-card card">
-		<div class="map-wrap">
-			<svg viewBox="0 0 360 180" preserveAspectRatio="none" class="map-svg">
-				<!-- Ocean background -->
-				<rect x="0" y="0" width="360" height="180" fill="#0b1220" />
-
-				<!-- Climate bands -->
-				<rect
-					x="0"
-					y={projY(POLAR)}
-					width="360"
-					height={projY(-POLAR) - projY(POLAR)}
-					fill="#0e1a33"
-				/>
-				<rect
-					x="0"
-					y={projY(TROPIC)}
-					width="360"
-					height={projY(-TROPIC) - projY(TROPIC)}
-					fill="#13233f"
-				/>
-
-				<!-- Graticule -->
-				{#each [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150] as lon}
-					<line
-						x1={projX(lon)}
-						y1="0"
-						x2={projX(lon)}
-						y2="180"
-						stroke="#22304d"
-						stroke-width="0.2"
-					/>
-				{/each}
-				{#each [-60, -30, 30, 60] as lat}
-					<line
-						x1="0"
-						y1={projY(lat)}
-						x2="360"
-						y2={projY(lat)}
-						stroke="#22304d"
-						stroke-width="0.2"
-					/>
-				{/each}
-
-				<!-- Equator, tropics, polar circles -->
-				<line x1="0" y1={projY(0)} x2="360" y2={projY(0)} stroke="#3b5278" stroke-width="0.35" />
-				{#each [TROPIC, -TROPIC, POLAR, -POLAR] as lat}
-					<line
-						x1="0"
-						y1={projY(lat)}
-						x2="360"
-						y2={projY(lat)}
-						stroke="#2c4a3a"
-						stroke-width="0.3"
-						stroke-dasharray="2 2"
-					/>
-				{/each}
-
-				<!-- Subsolar latitude for the selected day -->
-				<line
-					x1="0"
-					y1={subsolarY}
-					x2="360"
-					y2={subsolarY}
-					stroke="#fcd34d"
-					stroke-width="0.5"
-					stroke-dasharray="3 2"
-					opacity="0.85"
-				/>
-
-				<!-- City markers -->
-				{#each CITIES as c}
-					{@const h = daylightHours(c.lat, selectedDay)}
-					<circle
-						cx={projX(c.lon)}
-						cy={projY(c.lat)}
-						r={hovered === c || selected === c ? 3 : 2}
-						fill={colorForHours(h)}
-						stroke={selected === c ? '#ffffff' : '#0b1220'}
-						stroke-width={selected === c ? 0.8 : 0.4}
-						class="city-dot"
-						on:mouseenter={() => (hovered = c)}
-						on:mouseleave={() => (hovered = null)}
-						on:click={() => (selected = c)}
-						on:keydown={(e) => e.key === 'Enter' && (selected = c)}
-						role="button"
-						tabindex="0"
-						aria-label={c.name}
-					/>
-				{/each}
-			</svg>
-
-			<!-- Hover tooltip -->
-			{#if hovered}
-				{@const h = daylightHours(hovered.lat, selectedDay)}
-				<div class="tooltip" style="left: {leftPct(hovered.lon)}%; top: {topPct(hovered.lat)}%;">
-					<strong>{hovered.name}</strong>
-					<span class="muted">{hovered.country}</span>
-					<span class="big">{fmt(h)} of daylight</span>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Legend -->
+		<div class="map" bind:this={mapEl} />
 		<div class="legend">
 			<span class="legend-label">Daylight:</span>
 			<div class="legend-scale">
@@ -253,7 +245,6 @@
 					<span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span>
 				</div>
 			</div>
-			<span class="legend-note">— dashed gold line = where the sun is directly overhead</span>
 		</div>
 	</div>
 
@@ -319,7 +310,7 @@
 				</thead>
 				<tbody>
 					{#each sortedTable as row}
-						<tr class:active={selected === row.city} on:click={() => (selected = row.city)}>
+						<tr class:active={selected === row.city} on:click={() => selectCity(row.city)}>
 							<td class="city-name">
 								{row.city.name}
 								<span class="muted">{row.city.country}</span>
@@ -343,7 +334,7 @@
 			Values are hours between sunrise and sunset, computed from each city's latitude using the
 			solar-declination and sunrise equations (including a −0.833° correction for atmospheric
 			refraction and the sun's radius). Months are sampled on the 15th. Daylight Saving Time is not
-			applied.
+			applied. Map tiles © OpenStreetMap contributors.
 		</p>
 	</div>
 </div>
@@ -439,50 +430,21 @@
 	}
 
 	/* Map */
-	.map-wrap {
-		position: relative;
+	.map {
 		width: 100%;
-		aspect-ratio: 2 / 1;
+		height: clamp(340px, 58vh, 560px);
 		border-radius: 10px;
-		overflow: hidden;
 		border: 1px solid #223;
+		background: #0a1426;
+		z-index: 0;
 	}
-	.map-svg {
-		width: 100%;
-		height: 100%;
-		display: block;
+	/* Leaflet popups read better on the dark theme */
+	:global(.leaflet-popup-content) {
+		margin: 10px 14px;
+		font-family: system-ui, sans-serif;
 	}
-	.city-dot {
-		cursor: pointer;
-		transition: r 0.1s ease;
-	}
-	.city-dot:hover {
-		filter: brightness(1.2);
-	}
-
-	.tooltip {
-		position: absolute;
-		transform: translate(-50%, calc(-100% - 10px));
-		background: rgba(10, 15, 28, 0.95);
-		border: 1px solid #34406040;
-		border-radius: 8px;
-		padding: 6px 10px;
-		display: flex;
-		flex-direction: column;
-		white-space: nowrap;
-		pointer-events: none;
-		font-size: 0.8rem;
-		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-		z-index: 5;
-	}
-	.tooltip .muted {
-		color: #8a96ad;
-		font-size: 0.7rem;
-	}
-	.tooltip .big {
-		color: #fcd34d;
-		font-weight: 600;
-		margin-top: 2px;
+	:global(.leaflet-container) {
+		font-family: system-ui, sans-serif;
 	}
 
 	/* Legend */
@@ -515,10 +477,6 @@
 		font-size: 0.65rem;
 		color: #8a96ad;
 		margin-top: 2px;
-	}
-	.legend-note {
-		color: #8a96ad;
-		font-size: 0.72rem;
 	}
 
 	/* Detail */
