@@ -1,21 +1,23 @@
-import adapter from '@sveltejs/adapter-auto';
-import { vitePreprocess } from '@sveltejs/kit/vite';
-import preprocess from 'svelte-preprocess'
-import seqPreprocessor from 'svelte-sequential-preprocessor'
-import { preprocessThrelte } from '@threlte/preprocess'
+import adapter from '@sveltejs/adapter-static';
+import preprocess from 'svelte-preprocess';
+import seqPreprocessor from 'svelte-sequential-preprocessor';
+import { preprocessThrelte } from '@threlte/preprocess';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	// Consult https://kit.svelte.dev/docs/integrations#preprocessors
 	// for more information about preprocessors
-	preprocess: vitePreprocess(),
+	preprocess: seqPreprocessor([preprocess(), preprocessThrelte()]),
 	kit: {
-		// adapter-auto only supports some environments, see https://kit.svelte.dev/docs/adapter-auto for a list.
-		// If your environment is not supported or you settled on a specific environment, switch out the adapter.
-		// See https://kit.svelte.dev/docs/adapters for more information about adapters.
-		adapter: adapter()
-	},
-	preprocess: seqPreprocessor([preprocess(), preprocessThrelte()])
+		// Ship a fully static single-page app. The whole site is client-side
+		// (Leaflet, three.js/threlte, the neuron sim), so there is no server to
+		// deploy and no Node runtime version that can break on Vercel. The
+		// fallback page lets the client router handle every route.
+		adapter: adapter({
+			fallback: 'index.html',
+			precompress: false
+		})
+	}
 };
 
 export default config;
