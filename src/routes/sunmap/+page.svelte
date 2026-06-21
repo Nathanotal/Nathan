@@ -8,7 +8,9 @@
 		annualAverage,
 		colorForHours,
 		colorForSunshine,
+		colorForRadiation,
 		SUNSHINE_MAX,
+		RAD_MAX,
 		monthIndex,
 		dateLabel,
 		solarDeclination
@@ -19,6 +21,11 @@
 	// Map mode: astronomical max daylight vs. real recorded sunshine.
 	type Mode = 'astro' | 'real';
 	let mode: Mode = 'astro';
+
+	// Within real mode, colour by recorded sunshine hours or by solar radiation
+	// (the better proxy for SAD-relevant light). The slider tunes the month.
+	type Metric = 'sun' | 'rad';
+	let realMetric: Metric = 'sun';
 
 	// --- State -------------------------------------------------------------
 	let selectedDay = 172; // ~21 June, northern summer solstice
@@ -93,6 +100,28 @@
 	const winterSun = (k: number) => meanOf(sunVals[k], WINTER);
 	const winterRad = (k: number) => meanOf(sunRad[k], WINTER);
 
+	// Value/colour/label for whichever real-mode metric is selected.
+	const metricVal = (k: number, m: number) => (realMetric === 'rad' ? sunRad[k][m] : sunVals[k][m]);
+	const metricWinter = (k: number) => (realMetric === 'rad' ? winterRad(k) : winterSun(k));
+	const metricColor = (v: number | null) =>
+		realMetric === 'rad' ? colorForRadiation(v ?? 0) : colorForSunshine(v ?? 0);
+	const metricFmt = (v: number | null) =>
+		v == null ? 'no data' : realMetric === 'rad' ? `${v.toFixed(1)} MJ/m²/day` : sunFmt(v);
+	const metricUnit = () => (realMetric === 'rad' ? 'solar radiation' : 'sunshine');
+
+	// Detail bar chart follows the selected metric (referenced directly so Svelte
+	// tracks realMetric as a dependency).
+	$: detailMax = realMetric === 'rad' ? RAD_MAX : SUNSHINE_MAX;
+	$: detailBars = ((k: number | null) =>
+		k == null || !sunReady
+			? []
+			: MONTHS.map((m, mi) => ({
+					short: m.short,
+					name: m.name,
+					winter: WINTER.includes(mi),
+					v: realMetric === 'rad' ? sunRad[k][mi] : sunVals[k][mi]
+				})))(selectedSunIdx);
+
 	// True when the slider sits on the "Average" sentinel in winter focus.
 	$: winterAvgView = winterFocus && selectedDay <= WINTER_AVG;
 	// Effective day-of-year (1..365) for display, wrapping past the year boundary.
@@ -160,18 +189,26 @@
 
 	function sunInfoHtml(k: number): string {
 		const tag = isEst(k) ? '#475569' : '#b45309';
-		const v = winterAvgView ? winterSun(k) : sunVals[k][curMonth];
+		// Primary = selected metric; secondary = the other one, for context.
+		const primary = winterAvgView ? metricWinter(k) : metricVal(k, curMonth);
+		const sun = winterAvgView ? winterSun(k) : sunVals[k][curMonth];
 		const rad = winterAvgView ? winterRad(k) : sunRad[k][curMonth];
-		const when = winterAvgView ? 'avg sun/day, Oct–Feb' : `avg sun/day in ${MONTHS[curMonth].name}`;
+		const period = winterAvgView ? 'Oct–Feb avg' : MONTHS[curMonth].name;
+		const secondary =
+			realMetric === 'rad'
+				? sun != null
+					? `${sunFmt(sun)} sunshine/day`
+					: ''
+				: rad != null
+					? `${rad.toFixed(1)} MJ/m²/day radiation`
+					: '';
 		return (
 			`<div style="text-align:center;min-width:150px">` +
 			`<strong>${sunNames[k]}</strong>` +
 			`<br><span style="color:#64748b">${sunCountry[k]}</span>` +
-			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${sunFmt(v)}</span>` +
-			`<br><span style="color:#64748b">${when}</span>` +
-			(rad != null
-				? `<br><span style="color:#64748b">☀ ${rad.toFixed(1)} MJ/m²/day radiation</span>`
-				: '') +
+			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${metricFmt(primary)}</span>` +
+			`<br><span style="color:#64748b">${metricUnit()} · ${period}</span>` +
+			(secondary ? `<br><span style="color:#64748b">${secondary}</span>` : '') +
 			`<br><span style="font-size:0.72rem;color:${tag}">${isEst(k) ? '≈ estimated (NASA POWER)' : '✓ recorded (Wikipedia)'}</span>` +
 			`</div>`
 		);
@@ -254,6 +291,7 @@
 		curMonth;
 		showEstimated;
 		winterFocus;
+		realMetric;
 		if (mapReady && dataReady) {
 			rebuildColorTable(effDay);
 			scheduleRender();
@@ -383,9 +421,9 @@
 						if (la < south || la > north) continue;
 						const lo0 = sunLon[k];
 						if (sunEstFlag[k] && !showEstimated) continue;
-						const v = winterAvgView ? winterSun(k) : sunVals[k][month];
+						const v = winterAvgView ? metricWinter(k) : metricVal(k, month);
 						if (v == null) continue;
-						ctx.fillStyle = colorForSunshine(v);
+						ctx.fillStyle = metricColor(v);
 						const recorded = sunEstFlag[k] === 0;
 						for (let w = -360; w <= 360; w += 360) {
 							const lon = lo0 + w;
@@ -620,6 +658,24 @@
 
 	const legendStops = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 	const sunshineStops = [0, 2, 4, 6, 8, 10, SUNSHINE_MAX];
+	const radStops = [0, 4, 8, 13, 18, 24, RAD_MAX];
+
+	$: legendLabel =
+		mode !== 'real'
+			? 'Daylight:'
+			: realMetric === 'rad'
+				? winterAvgView
+					? 'Oct–Feb radiation:'
+					: 'Radiation:'
+				: winterAvgView
+					? 'Oct–Feb sun/day:'
+					: 'Sunshine/day:';
+	$: legendSpec =
+		mode !== 'real'
+			? { stops: legendStops, color: colorForHours, ticks: ['0h', '6h', '12h', '18h', '24h'] }
+			: realMetric === 'rad'
+				? { stops: radStops, color: colorForRadiation, ticks: ['0', '10', '20', '30+'] }
+				: { stops: sunshineStops, color: colorForSunshine, ticks: ['0h', '4h', '8h', '12h+'] };
 	const nf = new Intl.NumberFormat('en-US');
 </script>
 
@@ -703,6 +759,15 @@
 			{/if}
 		</p>
 		{#if mode === 'real' && sunReady}
+			<div class="metric-seg" role="group" aria-label="Colour by">
+				<span class="metric-lbl">Colour by:</span>
+				<button class="seg-btn sm" class:on={realMetric === 'sun'} on:click={() => (realMetric = 'sun')}>
+					☀ Sunshine
+				</button>
+				<button class="seg-btn sm" class:on={realMetric === 'rad'} on:click={() => (realMetric = 'rad')}>
+					🔆 Solar radiation
+				</button>
+			</div>
 			<div class="toggle-row">
 				<label class="est-toggle">
 					<input type="checkbox" bind:checked={winterFocus} on:change={onWinterToggle} />
@@ -716,9 +781,10 @@
 			{#if winterFocus}
 				<p class="winter-note">
 					The slider now spans <strong>Oct–Feb</strong>, the window that matters for Seasonal Affective
-					Disorder. Leave it on <strong>Avg</strong> to colour cities by their average winter sunshine,
-					or scrub through the individual winter months. Click a city for its sunshine and
-					solar-radiation dose.
+					Disorder. Leave it on <strong>Avg</strong> for the winter average, or scrub Nov/Dec/Jan to see
+					each month. Solar radiation is the better proxy for SAD-relevant light — it captures the dim
+					diffuse light of overcast skies that sunshine hours score as zero. This shows
+					<em>available</em> light, not the dose you actually get (going outdoors dominates that).
 				</p>
 			{/if}
 		{/if}
@@ -735,41 +801,22 @@
 			{/if}
 		</div>
 		<div class="legend">
-			<span class="legend-label"
-				>{mode !== 'real' ? 'Daylight:' : winterAvgView ? 'Oct–Feb sun/day:' : 'Sunshine/day:'}</span
-			>
+			<span class="legend-label">{legendLabel}</span>
 			<div class="legend-scale">
 				<div class="legend-bar">
-					{#if mode === 'real'}
-						{#each sunshineStops as s, i}
-							{#if i < sunshineStops.length - 1}
-								<div
-									class="legend-seg"
-									style="background: linear-gradient(to right, {colorForSunshine(
-										s
-									)}, {colorForSunshine(sunshineStops[i + 1])});"
-								/>
-							{/if}
-						{/each}
-					{:else}
-						{#each legendStops as s, i}
-							{#if i < legendStops.length - 1}
-								<div
-									class="legend-seg"
-									style="background: linear-gradient(to right, {colorForHours(s)}, {colorForHours(
-										legendStops[i + 1]
-									)});"
-								/>
-							{/if}
-						{/each}
-					{/if}
+					{#each legendSpec.stops as s, i}
+						{#if i < legendSpec.stops.length - 1}
+							<div
+								class="legend-seg"
+								style="background: linear-gradient(to right, {legendSpec.color(
+									s
+								)}, {legendSpec.color(legendSpec.stops[i + 1])});"
+							/>
+						{/if}
+					{/each}
 				</div>
 				<div class="legend-ticks">
-					{#if mode === 'real'}
-						<span>0h</span><span>4h</span><span>8h</span><span>12h+</span>
-					{:else}
-						<span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span>
-					{/if}
+					{#each legendSpec.ticks as t}<span>{t}</span>{/each}
 				</div>
 			</div>
 		</div>
@@ -818,23 +865,21 @@
 				</div>
 				<!-- Real monthly sunshine bar chart -->
 			<div class="year-chart">
-				{#each MONTHS as m, mi}
-					{@const v = sunVals[k][mi]}
-					<div class="bar-col" class:winter={WINTER.includes(mi)} title="{m.name}: {sunFmt(v)}">
+				{#each detailBars as bar}
+					{@const v = bar.v}
+					<div class="bar-col" class:winter={bar.winter} title="{bar.name}: {metricFmt(v)}">
 						<div class="bar-track">
 							<div
 								class="bar-fill"
-								style="height: {((v ?? 0) / SUNSHINE_MAX) * 100}%; background: {colorForSunshine(
-									v ?? 0
-								)};"
+								style="height: {((v ?? 0) / detailMax) * 100}%; background: {metricColor(v)};"
 							/>
 						</div>
-						<span class="bar-lbl">{m.short}</span>
+						<span class="bar-lbl">{bar.short}</span>
 					</div>
 				{/each}
 			</div>
 			<p class="footnote">
-				Real recorded sunshine for {sunNames[k]} — average bright-sunshine hours per day for each
+				Monthly sunshine &amp; solar radiation for {sunNames[k]}— average bright-sunshine hours per day for each
 				calendar month . {#if isEst(k)}This value is <strong>estimated</strong> from NASA POWER satellite data (not directly measured). {/if}Source:
 				<a href={srcMeta(k)?.url} target="_blank" rel="noopener">{srcMeta(k)?.source ?? 'Wikipedia'}</a>{#if sunRad[k][curMonth] != null}; solar radiation from
 					<a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a> (1991–2020){/if}.
@@ -1110,6 +1155,31 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px 22px;
+	}
+	.metric-seg {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-wrap: wrap;
+		margin-bottom: 4px;
+	}
+	.metric-lbl {
+		font-size: 0.82rem;
+		color: #9aa6bd;
+		margin-right: 2px;
+	}
+	.seg-btn.sm {
+		flex: none;
+		padding: 5px 12px;
+		font-size: 0.82rem;
+		border-radius: 7px;
+		border: 1px solid #1f2940;
+		background: #0e1626;
+	}
+	.seg-btn.sm.on {
+		background: #fcd34d;
+		color: #1a1a1a;
+		border-color: #fcd34d;
 	}
 	.winter-note {
 		margin: 8px 0 0;

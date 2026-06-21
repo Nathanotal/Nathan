@@ -196,8 +196,43 @@ export function colorForSunshine(hours: number): string {
 	return rgb(stops[0].c);
 }
 
-// A diverse set of cities spanning every continent and a wide range of
-// latitudes, including extreme ones to show midnight sun and polar night.
+/** Upper end of the solar-radiation colour scale, MJ/m²/day. */
+export const RAD_MAX = 30;
+
+/**
+ * Colour for daily solar radiation (MJ/m²/day) — the best single proxy for the
+ * bright-light dose relevant to Seasonal Affective Disorder. Goes from a dim
+ * winter slate-blue through to a bright high-sun gold. Stops are spaced to give
+ * good resolution in the low (winter) range.
+ */
+export function colorForRadiation(mj: number): string {
+	const stops: { h: number; c: [number, number, number] }[] = [
+		{ h: 0, c: [30, 41, 68] }, // near-zero (deep polar winter)
+		{ h: 4, c: [47, 84, 150] }, // low – blue
+		{ h: 8, c: [72, 140, 175] }, // teal
+		{ h: 13, c: [150, 170, 140] }, // transition
+		{ h: 18, c: [230, 190, 80] }, // gold
+		{ h: 24, c: [250, 210, 70] }, // bright gold
+		{ h: RAD_MAX, c: [255, 240, 150] } // brightest (tropical summer)
+	];
+
+	if (!Number.isFinite(mj) || mj <= stops[0].h) return rgb(stops[0].c);
+	if (mj >= stops[stops.length - 1].h) return rgb(stops[stops.length - 1].c);
+
+	for (let i = 0; i < stops.length - 1; i++) {
+		const a = stops[i];
+		const b = stops[i + 1];
+		if (mj >= a.h && mj <= b.h) {
+			const t = (mj - a.h) / (b.h - a.h);
+			return rgb([
+				Math.round(a.c[0] + (b.c[0] - a.c[0]) * t),
+				Math.round(a.c[1] + (b.c[1] - a.c[1]) * t),
+				Math.round(a.c[2] + (b.c[2] - a.c[2]) * t)
+			]);
+		}
+	}
+	return rgb(stops[0].c);
+}
 export const CITIES: City[] = [
 	// Europe
 	{ name: 'Longyearbyen', country: 'Svalbard', lat: 78.22, lon: 15.65 },
