@@ -70,6 +70,24 @@
 	const srcMeta = (k: number) => (isEst(k) ? metaEst : metaRec);
 	const kindLabel = (k: number) => (isEst(k) ? 'Estimated · NASA POWER' : 'Recorded · Wikipedia');
 
+	// Winter (Oct–Feb) focus — the season that drives Seasonal Affective Disorder.
+	const WINTER = [9, 10, 11, 0, 1]; // Oct, Nov, Dec, Jan, Feb
+	let winterFocus = false;
+	const meanOf = (arr: (number | null)[], months: number[]) => {
+		let s = 0,
+			c = 0;
+		for (const m of months) {
+			const v = arr[m];
+			if (v != null) {
+				s += v;
+				c++;
+			}
+		}
+		return c ? s / c : null;
+	};
+	const winterSun = (k: number) => meanOf(sunVals[k], WINTER);
+	const winterRad = (k: number) => meanOf(sunRad[k], WINTER);
+
 	$: curMonth = monthIndex(selectedDay);
 
 	// Daylight colour depends only on latitude + day, so precompute a colour for
@@ -126,14 +144,19 @@
 	}
 
 	function sunInfoHtml(k: number): string {
-		const v = sunVals[k][curMonth];
 		const tag = isEst(k) ? '#475569' : '#b45309';
+		const v = winterFocus ? winterSun(k) : sunVals[k][curMonth];
+		const rad = winterFocus ? winterRad(k) : sunRad[k][curMonth];
+		const when = winterFocus ? 'avg sun/day, Oct–Feb' : `avg sun/day in ${MONTHS[curMonth].name}`;
 		return (
-			`<div style="text-align:center;min-width:140px">` +
+			`<div style="text-align:center;min-width:150px">` +
 			`<strong>${sunNames[k]}</strong>` +
 			`<br><span style="color:#64748b">${sunCountry[k]}</span>` +
 			`<br><span style="font-size:1.15rem;font-weight:700;color:#b45309">${sunFmt(v)}</span>` +
-			`<br><span style="color:#64748b">avg sunshine/day in ${MONTHS[curMonth].name}</span>` +
+			`<br><span style="color:#64748b">${when}</span>` +
+			(rad != null
+				? `<br><span style="color:#64748b">☀ ${rad.toFixed(1)} MJ/m²/day radiation</span>`
+				: '') +
 			`<br><span style="font-size:0.72rem;color:${tag}">${isEst(k) ? '≈ estimated (NASA POWER)' : '✓ recorded (Wikipedia)'}</span>` +
 			`</div>`
 		);
@@ -210,6 +233,7 @@
 		mode;
 		curMonth;
 		showEstimated;
+		winterFocus;
 		if (mapReady && dataReady) {
 			rebuildColorTable(selectedDay);
 			scheduleRender();
@@ -339,7 +363,7 @@
 						if (la < south || la > north) continue;
 						const lo0 = sunLon[k];
 						if (sunEstFlag[k] && !showEstimated) continue;
-						const v = sunVals[k][month];
+						const v = winterFocus ? winterSun(k) : sunVals[k][month];
 						if (v == null) continue;
 						ctx.fillStyle = colorForSunshine(v);
 						const recorded = sunEstFlag[k] === 0;
@@ -637,10 +661,23 @@
 			{/if}
 		</p>
 		{#if mode === 'real' && sunReady}
-			<label class="est-toggle">
-				<input type="checkbox" bind:checked={showEstimated} />
-				Show estimated cities ({nf.format(sunN - sunNRecorded)})
-			</label>
+			<div class="toggle-row">
+				<label class="est-toggle">
+					<input type="checkbox" bind:checked={winterFocus} />
+					❄️ Winter focus (Oct–Feb) — the SAD season
+				</label>
+				<label class="est-toggle">
+					<input type="checkbox" bind:checked={showEstimated} />
+					Show estimated cities ({nf.format(sunN - sunNRecorded)})
+				</label>
+			</div>
+			{#if winterFocus}
+				<p class="winter-note">
+					Cities coloured by their <strong>average daily sunshine across Oct–Feb</strong> — the window
+					that matters for Seasonal Affective Disorder. The date slider is ignored; click a city for its
+					winter sunshine and solar-radiation dose.
+				</p>
+			{/if}
 		{/if}
 	</div>
 
@@ -655,7 +692,9 @@
 			{/if}
 		</div>
 		<div class="legend">
-			<span class="legend-label">{mode === 'real' ? 'Sunshine/day:' : 'Daylight:'}</span>
+			<span class="legend-label"
+				>{mode !== 'real' ? 'Daylight:' : winterFocus ? 'Oct–Feb sun/day:' : 'Sunshine/day:'}</span
+			>
 			<div class="legend-scale">
 				<div class="legend-bar">
 					{#if mode === 'real'}
@@ -723,11 +762,22 @@
 					</div>
 				{/if}
 			</div>
-			<!-- Real monthly sunshine bar chart -->
+			<!-- Winter (Oct-Feb) SAD summary -->
+				<div class="winter-summary">
+					<span class="winter-icon">❄️</span>
+					<div class="winter-text">
+						<span class="winter-lbl">Winter · Oct–Feb (SAD season)</span>
+						<span class="winter-vals">
+							<strong>{sunFmt(winterSun(k))}</strong> sun/day{#if winterRad(k) != null}
+								· <strong>{winterRad(k)?.toFixed(1)}</strong> MJ/m²/day radiation{/if}
+						</span>
+					</div>
+				</div>
+				<!-- Real monthly sunshine bar chart -->
 			<div class="year-chart">
 				{#each MONTHS as m, mi}
 					{@const v = sunVals[k][mi]}
-					<div class="bar-col" title="{m.name}: {sunFmt(v)}">
+					<div class="bar-col" class:winter={WINTER.includes(mi)} title="{m.name}: {sunFmt(v)}">
 						<div class="bar-track">
 							<div
 								class="bar-fill"
@@ -1012,6 +1062,54 @@
 	.est-toggle input {
 		accent-color: #fcd34d;
 		cursor: pointer;
+	}
+	.toggle-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 22px;
+	}
+	.winter-note {
+		margin: 8px 0 0;
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: #9fb3d1;
+		border-left: 3px solid #38bdf8;
+		padding-left: 10px;
+	}
+	.winter-summary {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin: 14px 0 4px;
+		padding: 12px 14px;
+		background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.03));
+		border: 1px solid rgba(56, 189, 248, 0.35);
+		border-radius: 10px;
+	}
+	.winter-icon {
+		font-size: 1.5rem;
+	}
+	.winter-text {
+		display: flex;
+		flex-direction: column;
+	}
+	.winter-lbl {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: #7dd3fc;
+	}
+	.winter-vals {
+		font-size: 1.05rem;
+		color: #e5e9f0;
+	}
+	.winter-vals strong {
+		color: #fcd34d;
+	}
+	.bar-col.winter .bar-track {
+		outline: 1px solid rgba(56, 189, 248, 0.55);
+		outline-offset: 1px;
+		border-radius: 4px;
 	}
 	.badge {
 		font-size: 0.6rem;
