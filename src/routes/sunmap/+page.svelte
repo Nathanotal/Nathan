@@ -72,6 +72,11 @@
 
 	// Winter (Oct–Feb) focus — the season that drives Seasonal Affective Disorder.
 	const WINTER = [9, 10, 11, 0, 1]; // Oct, Nov, Dec, Jan, Feb
+	// In winter focus the date slider is repurposed to span Oct 1..Feb 28, with a
+	// sentinel "Average" position one step before the start.
+	const WINTER_AVG = 273; // slider value meaning "Oct–Feb average"
+	const WINTER_START = 274; // Oct 1 (day-of-year)
+	const WINTER_END = 424; // Feb 28 (365 + 59)
 	let winterFocus = false;
 	const meanOf = (arr: (number | null)[], months: number[]) => {
 		let s = 0,
@@ -88,7 +93,17 @@
 	const winterSun = (k: number) => meanOf(sunVals[k], WINTER);
 	const winterRad = (k: number) => meanOf(sunRad[k], WINTER);
 
-	$: curMonth = monthIndex(selectedDay);
+	// True when the slider sits on the "Average" sentinel in winter focus.
+	$: winterAvgView = winterFocus && selectedDay <= WINTER_AVG;
+	// Effective day-of-year (1..365) for display, wrapping past the year boundary.
+	$: effDay = winterAvgView ? 355 : ((selectedDay - 1) % 365) + 1;
+	$: curMonth = monthIndex(effDay);
+
+	function onWinterToggle() {
+		// Park the slider on "Average" when entering winter focus; restore a real
+		// day when leaving.
+		selectedDay = winterFocus ? WINTER_AVG : effDay;
+	}
 
 	// Daylight colour depends only on latitude + day, so precompute a colour for
 	// each 0.25° latitude band once per day and reuse it for every city.
@@ -104,7 +119,7 @@
 		colorTable = t;
 	}
 
-	$: declDeg = (solarDeclination(selectedDay) * 180) / Math.PI;
+	$: declDeg = (solarDeclination(effDay) * 180) / Math.PI;
 
 	// First index k where sortedLat[k] >= target (binary search).
 	function lowerBound(target: number) {
@@ -145,9 +160,9 @@
 
 	function sunInfoHtml(k: number): string {
 		const tag = isEst(k) ? '#475569' : '#b45309';
-		const v = winterFocus ? winterSun(k) : sunVals[k][curMonth];
-		const rad = winterFocus ? winterRad(k) : sunRad[k][curMonth];
-		const when = winterFocus ? 'avg sun/day, Oct–Feb' : `avg sun/day in ${MONTHS[curMonth].name}`;
+		const v = winterAvgView ? winterSun(k) : sunVals[k][curMonth];
+		const rad = winterAvgView ? winterRad(k) : sunRad[k][curMonth];
+		const when = winterAvgView ? 'avg sun/day, Oct–Feb' : `avg sun/day in ${MONTHS[curMonth].name}`;
 		return (
 			`<div style="text-align:center;min-width:150px">` +
 			`<strong>${sunNames[k]}</strong>` +
@@ -164,6 +179,11 @@
 
 	function setMode(m: Mode) {
 		if (mode === m) return;
+		// Winter focus only applies to real sunshine; reset the slider leaving it.
+		if (m !== 'real' && winterFocus) {
+			winterFocus = false;
+			selectedDay = effDay;
+		}
 		mode = m;
 		if (map) map.closePopup();
 	}
@@ -235,7 +255,7 @@
 		showEstimated;
 		winterFocus;
 		if (mapReady && dataReady) {
-			rebuildColorTable(selectedDay);
+			rebuildColorTable(effDay);
 			scheduleRender();
 		}
 	}
@@ -279,7 +299,7 @@
 			sortedLat = new Float32Array(nCities);
 			for (let k = 0; k < nCities; k++) sortedLat[k] = bigLat[order[k]];
 
-			rebuildColorTable(selectedDay);
+			rebuildColorTable(effDay);
 			dataReady = true;
 			loading = false;
 
@@ -363,7 +383,7 @@
 						if (la < south || la > north) continue;
 						const lo0 = sunLon[k];
 						if (sunEstFlag[k] && !showEstimated) continue;
-						const v = winterFocus ? winterSun(k) : sunVals[k][month];
+						const v = winterAvgView ? winterSun(k) : sunVals[k][month];
 						if (v == null) continue;
 						ctx.fillStyle = colorForSunshine(v);
 						const recorded = sunEstFlag[k] === 0;
@@ -567,7 +587,11 @@
 		playing = !playing;
 		if (playing) {
 			timer = setInterval(() => {
-				selectedDay = (selectedDay % 365) + 1;
+				selectedDay = winterFocus
+					? selectedDay >= WINTER_END
+						? WINTER_START
+						: Math.max(selectedDay, WINTER_START - 1) + 1
+					: (selectedDay % 365) + 1;
 			}, 60);
 		} else if (timer) {
 			clearInterval(timer);
@@ -582,6 +606,16 @@
 		{ d: 182, l: 'Jul' },
 		{ d: 244, l: 'Sep' },
 		{ d: 305, l: 'Nov' }
+	];
+
+	// Winter-focus slider marks: "Avg" sentinel + Oct..Feb (days wrap past 365).
+	const winterMarks = [
+		{ d: WINTER_AVG, l: 'Avg' },
+		{ d: 274, l: 'Oct' },
+		{ d: 305, l: 'Nov' },
+		{ d: 335, l: 'Dec' },
+		{ d: 366, l: 'Jan' },
+		{ d: 397, l: 'Feb' }
 	];
 
 	const legendStops = [0, 3, 6, 9, 12, 15, 18, 21, 24];
@@ -612,15 +646,23 @@
 		</button>
 		<div class="slider-wrap">
 			<div class="slider-top">
-				<span class="date-label">{dateLabel(selectedDay)}</span>
-				<span class="decl"
-					>Sun overhead at {declDeg >= 0 ? 'N' : 'S'}
-					{Math.abs(declDeg).toFixed(1)}°</span
-				>
+				<span class="date-label">{winterAvgView ? 'Oct–Feb average' : dateLabel(effDay)}</span>
+				{#if !winterAvgView}
+					<span class="decl"
+						>Sun overhead at {declDeg >= 0 ? 'N' : 'S'}
+						{Math.abs(declDeg).toFixed(1)}°</span
+					>
+				{/if}
 			</div>
-			<input type="range" min="1" max="365" bind:value={selectedDay} class="slider" />
+			<input
+				type="range"
+				min={winterFocus ? WINTER_AVG : 1}
+				max={winterFocus ? WINTER_END : 365}
+				bind:value={selectedDay}
+				class="slider"
+			/>
 			<div class="month-marks">
-				{#each monthMarks as m}
+				{#each winterFocus ? winterMarks : monthMarks as m}
 					<button class="mark" on:click={() => (selectedDay = m.d)}>{m.l}</button>
 				{/each}
 			</div>
@@ -663,7 +705,7 @@
 		{#if mode === 'real' && sunReady}
 			<div class="toggle-row">
 				<label class="est-toggle">
-					<input type="checkbox" bind:checked={winterFocus} />
+					<input type="checkbox" bind:checked={winterFocus} on:change={onWinterToggle} />
 					❄️ Winter focus (Oct–Feb) — the SAD season
 				</label>
 				<label class="est-toggle">
@@ -673,9 +715,10 @@
 			</div>
 			{#if winterFocus}
 				<p class="winter-note">
-					Cities coloured by their <strong>average daily sunshine across Oct–Feb</strong> — the window
-					that matters for Seasonal Affective Disorder. The date slider is ignored; click a city for its
-					winter sunshine and solar-radiation dose.
+					The slider now spans <strong>Oct–Feb</strong>, the window that matters for Seasonal Affective
+					Disorder. Leave it on <strong>Avg</strong> to colour cities by their average winter sunshine,
+					or scrub through the individual winter months. Click a city for its sunshine and
+					solar-radiation dose.
 				</p>
 			{/if}
 		{/if}
@@ -693,7 +736,7 @@
 		</div>
 		<div class="legend">
 			<span class="legend-label"
-				>{mode !== 'real' ? 'Daylight:' : winterFocus ? 'Oct–Feb sun/day:' : 'Sunshine/day:'}</span
+				>{mode !== 'real' ? 'Daylight:' : winterAvgView ? 'Oct–Feb sun/day:' : 'Sunshine/day:'}</span
 			>
 			<div class="legend-scale">
 				<div class="legend-bar">
